@@ -11,6 +11,8 @@ router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 @router.get("/me", response_model=OrganizationOut)
 def get_my_organization(user: CurrentUser, db: DbSession) -> OrganizationOut:
+    if user.organization_id is None:
+        raise not_found()
     org = db.get(Organization, user.organization_id)
     if org is None:
         raise not_found()
@@ -21,6 +23,8 @@ def get_my_organization(user: CurrentUser, db: DbSession) -> OrganizationOut:
 def patch_my_organization(
     data: OrganizationPatchIn, user: CurrentUser, db: DbSession
 ) -> OrganizationOut:
+    if user.organization_id is None:
+        raise not_found()
     org = db.get(Organization, user.organization_id)
     if org is None:
         raise not_found()

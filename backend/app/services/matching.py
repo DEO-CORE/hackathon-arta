@@ -84,7 +84,7 @@ def match(m, requirements, organizations, limit):
         matches.append(
             dict(
                 requirement_id=str(r.id),
-                organization_name=organizations[r.organization_id].name,
+                organization_name=organizations[r.organization_id or r.user_id].name,
                 score=sum(scores.values()),
                 components=scores,
                 possible_kg=f"{upper:.3f}",

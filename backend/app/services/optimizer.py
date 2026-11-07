@@ -49,7 +49,7 @@ def build_edges(materials, requirements, assumptions, organizations):
                     str(m.id),
                     key,
                     "recycling"
-                    if organizations[r.organization_id].activity_type == "recycler"
+                    if organizations[r.organization_id or r.user_id].activity_type == "recycler"
                     else "sale",
                     str(r.id),
                     upper,

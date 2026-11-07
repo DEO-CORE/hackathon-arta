@@ -77,3 +77,41 @@ def test_vision_configuration_cannot_silently_enable_mock():
     with pytest.raises(ValidationError):
         Settings(**base, vision_provider="http_json")
     assert Settings(**base, vision_provider="mock", demo_mode=True).demo_mode
+
+
+def test_openai_adapter_sends_photo_and_validates_protocol(monkeypatch):
+    from types import SimpleNamespace
+
+    import httpx
+    from pydantic import SecretStr
+
+    from app.services import vision
+
+    raw = json.loads(Path("app/fixtures/demo-analysis.json").read_text())["result"]
+    captured = []
+
+    def handle(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(raw)}}]},
+        )
+
+    client_factory = httpx.Client
+    monkeypatch.setattr(
+        vision.httpx,
+        "Client",
+        lambda **kwargs: client_factory(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    settings = SimpleNamespace(
+        vision_provider="openai",
+        vision_model="configured-vision-model",
+        vision_api_key=SecretStr("test-key"),
+        vision_timeout_seconds=20,
+    )
+    assert vision.call_provider(settings, [{"mime_type": "image/png", "base64": "aGVsbG8="}]) == raw
+    assert captured[0]["messages"][1]["content"][0]["image_url"]["url"].startswith(
+        "data:image/png;base64,"
+    )
+    assert captured[0]["response_format"]["json_schema"]["strict"] is True
+    assert captured[0]["store"] is False

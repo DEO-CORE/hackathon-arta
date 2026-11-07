@@ -12,12 +12,21 @@ class Settings(BaseSettings):
 
     app_env: Literal["development", "production", "test"] = "development"
     demo_mode: bool = False
-    vision_provider: Literal["disabled", "mock", "http_json"] = "disabled"
+    vision_provider: Literal["disabled", "mock", "http_json", "openai"] = "disabled"
     vision_model: str | None = None
     vision_endpoint: str | None = None
     vision_api_key: SecretStr | None = None
     vision_timeout_seconds: int = Field(20, ge=1, le=20)
     optimization_timeout_seconds: int = Field(5, ge=1, le=30)
+
+    landing_url: str = "http://localhost:5173"
+    smtp_host: str | None = None
+    smtp_port: int = Field(587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str | None = None
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    reset_token_minutes: int = Field(30, ge=5, le=120)
 
     database_url: str
     jwt_secret: SecretStr
@@ -42,7 +51,11 @@ class Settings(BaseSettings):
                 raise ValueError("HTTP vision requires endpoint, model and API key")
             if not self.vision_endpoint.startswith("https://"):
                 raise ValueError("VISION_ENDPOINT must use HTTPS")
-        if self.app_env == "production" and (self.vision_provider != "http_json" or self.demo_mode):
+        if self.vision_provider == "openai" and (not self.vision_model or not self.vision_api_key):
+            raise ValueError("OpenAI requires VISION_MODEL and VISION_API_KEY")
+        if self.app_env == "production" and (
+            self.vision_provider not in ("http_json", "openai") or self.demo_mode
+        ):
             raise ValueError(
                 "Production requires a configured real vision provider without demo mode"
             )

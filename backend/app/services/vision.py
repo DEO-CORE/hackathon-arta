@@ -37,7 +37,12 @@ def call_provider(settings, images):
             raise ProviderFailure("PROVIDER_AUTH_ERROR")
         fixture = Path(__file__).resolve().parents[1] / "fixtures" / "demo-analysis.json"
         return json.loads(fixture.read_text())["result"]
-    if not settings.vision_endpoint or not settings.vision_api_key or not settings.vision_model:
+    endpoint = (
+        "https://api.openai.com/v1/chat/completions"
+        if settings.vision_provider == "openai"
+        else settings.vision_endpoint
+    )
+    if not endpoint or not settings.vision_api_key or not settings.vision_model:
         raise ProviderFailure("PROVIDER_UNAVAILABLE")
     payload = dict(
         model=settings.vision_model,
@@ -50,11 +55,43 @@ def call_provider(settings, images):
             "Return only JSON matching the supplied schema."
         ),
     )
+    if settings.vision_provider == "openai":
+        payload = dict(
+            model=settings.vision_model,
+            store=False,
+            messages=[
+                {
+                    "role": "system",
+                    "content": payload["instruction"] + " Write explanations in Russian.",
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": "data:" + i["mime_type"] + ";base64," + i["base64"]
+                            },
+                        }
+                        for i in images
+                    ],
+                },
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "textile_observation",
+                    "strict": True,
+                    "schema": VisionModelOutput.model_json_schema(),
+                },
+            },
+            max_completion_tokens=2000,
+        )
     for attempt in range(3):
         try:
             with httpx.Client(timeout=settings.vision_timeout_seconds) as client:
                 response = client.post(
-                    settings.vision_endpoint,
+                    endpoint,
                     json=payload,
                     headers={
                         "Authorization": "Bearer " + settings.vision_api_key.get_secret_value()
@@ -71,7 +108,18 @@ def call_provider(settings, images):
                 if attempt == 2:
                     raise ProviderFailure(code)
             elif response.is_success:
-                return response.json()
+                body = response.json()
+                if settings.vision_provider == "openai":
+                    try:
+                        choice = body["choices"][0]
+                        if choice["message"].get("refusal"):
+                            raise ProviderFailure("PROVIDER_REFUSED")
+                        if choice.get("finish_reason") != "stop":
+                            raise ProviderFailure("INVALID_PROVIDER_RESPONSE")
+                        return json.loads(choice["message"]["content"])
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        raise ProviderFailure("INVALID_PROVIDER_RESPONSE") from None
+                return body
             else:
                 raise ProviderFailure("PROVIDER_REFUSED")
         except httpx.TimeoutException:

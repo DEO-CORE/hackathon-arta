@@ -142,6 +142,9 @@ class ForecastOut(OutModel):
 
 
 class EnterpriseSummary(OutModel):
+    held_kg: str
+    transferred_kg: str
+    active_reservations_count: int
     role_view: Literal["enterprise"]
     registered_kg: str
     available_kg: str

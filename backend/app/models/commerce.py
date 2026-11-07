@@ -38,7 +38,10 @@ class BuyerRequirement(Record, Base):
         ),
         CheckConstraint("budget_per_kg IS NULL OR budget_per_kg >= 0", name="budget_nonnegative"),
     )
-    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
     material_types: Mapped[list[str]] = mapped_column(JSON)
     conditions: Mapped[list[str]] = mapped_column(JSON)
     min_kg: Mapped[Decimal] = mapped_column(Numeric(12, 3))
@@ -63,7 +66,9 @@ class Reservation(Record, Base):
     seller_organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id"), index=True
     )
-    buyer_organization_id: Mapped[uuid.UUID] = mapped_column(
+    buyer_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    purpose: Mapped[str | None] = mapped_column(String(500))
+    buyer_organization_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("organizations.id"), index=True
     )
     requirement_id: Mapped[uuid.UUID | None] = mapped_column(

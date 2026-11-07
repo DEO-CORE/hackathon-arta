@@ -26,10 +26,17 @@ def verify_password(password_hash: str | None, password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: UUID, settings: Settings) -> tuple[str, int]:
+def create_access_token(
+    user_id: UUID, settings: Settings, token_version: int = 0
+) -> tuple[str, int]:
     expires_in = settings.access_token_minutes * 60
     now = datetime.now(UTC)
-    payload = {"sub": str(user_id), "iat": now, "exp": now + timedelta(seconds=expires_in)}
+    payload = {
+        "ver": token_version,
+        "sub": str(user_id),
+        "iat": now,
+        "exp": now + timedelta(seconds=expires_in),
+    }
     token = jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm="HS256")
     return token, expires_in
 

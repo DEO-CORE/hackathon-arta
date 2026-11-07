@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import Annotated
 
+import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -27,17 +28,37 @@ Limiter = Annotated[RateLimiter, Depends(get_limiter)]
 
 
 def get_current_user(
+    request: Request,
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     db: DbSession,
     settings: SettingsDep,
 ) -> User:
-    if creds is None or creds.scheme.lower() != "bearer":
+    token = (
+        creds.credentials
+        if creds and creds.scheme.lower() == "bearer"
+        else request.cookies.get("arta_session")
+    )
+    if not token:
         raise AppError(401, "UNAUTHENTICATED")
-    user_id = decode_access_token(creds.credentials, settings)
+    if not creds and request.method not in ("GET", "HEAD", "OPTIONS"):
+        check_browser_origin(request, settings)
+    user_id = decode_access_token(token, settings)
     user = db.get(User, user_id) if user_id else None
-    if user is None or not user.active:
+    try:
+        version = jwt.decode(
+            token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"]
+        ).get("ver", 0)
+    except jwt.PyJWTError:
+        raise AppError(401, "UNAUTHENTICATED") from None
+    if user is None or not user.active or user.token_version != version:
         raise AppError(401, "UNAUTHENTICATED")
     return user
+
+
+def check_browser_origin(request: Request, settings: Settings):
+    allowed = {*settings.cors_origin_list, f"{request.url.scheme}://{request.url.netloc}"}
+    if request.headers.get("origin") not in allowed:
+        raise AppError(403, "FORBIDDEN")
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

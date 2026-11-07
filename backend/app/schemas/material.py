@@ -21,6 +21,7 @@ Version = Annotated[int, Field(strict=True, ge=1)]
 
 # Fields that are input characteristics: changing them resets confirmation (api.md section 4).
 CHARACTERISTIC_FIELDS = (
+    "description",
     "material_type",
     "composition",
     "scrap_size",
@@ -34,6 +35,7 @@ PATCHABLE_FIELDS = ("name", "price_per_kg", *CHARACTERISTIC_FIELDS)
 class MaterialCreateIn(StrictIn):
     name: trimmed(200)
     material_type: MaterialType | None = None
+    description: trimmed(1000) | None = None
     composition: trimmed(200) | None = None
     scrap_size: trimmed(100) | None = None
     condition: MaterialCondition | None = None
@@ -46,6 +48,7 @@ class MaterialPatchIn(StrictIn):
     version: Version
     name: trimmed(200) = None  # type: ignore[assignment]
     material_type: MaterialType | None = None
+    description: trimmed(1000) | None = None
     composition: trimmed(200) | None = None
     scrap_size: trimmed(100) | None = None
     condition: MaterialCondition | None = None
@@ -95,6 +98,7 @@ class MaterialOut(OutModel):
     organization_id: uuid.UUID
     name: str
     material_type: MaterialType | None
+    description: str | None = None
     composition: str | None
     scrap_size: str | None
     condition: MaterialCondition | None
@@ -117,6 +121,7 @@ class MaterialPublicOut(OutModel):
     organization_name: str
     name: str
     material_type: MaterialType | None
+    description: str | None = None
     composition: str | None
     scrap_size: str | None
     condition: MaterialCondition | None

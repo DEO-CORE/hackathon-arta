@@ -7,7 +7,17 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.api import admin, analytics, auth, commerce, health, materials, organizations, planning
+from app.api import (
+    admin,
+    analytics,
+    auth,
+    commerce,
+    health,
+    materials,
+    organizations,
+    planning,
+    public,
+)
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.middleware import RequestContextMiddleware
@@ -43,6 +53,7 @@ def create_app() -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origin_list,
+            allow_credentials=True,
             allow_methods=["GET", "POST", "PATCH", "DELETE"],
             allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
             expose_headers=["X-Request-ID", "Retry-After", "Location", "Idempotent-Replay"],
@@ -50,6 +61,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
     for r in (
         admin.router,
+        public.router,
         health.router,
         auth.router,
         organizations.router,

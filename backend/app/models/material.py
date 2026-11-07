@@ -49,6 +49,7 @@ class Material(Base):
             MaterialType, native_enum=False, create_constraint=True, length=32, name="material_type"
         )
     )
+    description: Mapped[str | None] = mapped_column(String(1000))
     composition: Mapped[str | None] = mapped_column(String(200))
     scrap_size: Mapped[str | None] = mapped_column(String(100))
     condition: Mapped[MaterialCondition | None] = mapped_column(

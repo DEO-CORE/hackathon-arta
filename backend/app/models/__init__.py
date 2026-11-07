@@ -7,6 +7,7 @@ __all__ = [
     "MaterialImage",
     "Organization",
     "User",
+    "PasswordReset",
     "BuyerRequirement",
     "IdempotencyRecord",
     "ImpactRecord",
@@ -24,4 +25,5 @@ from app.models.commerce import (
     Reservation,
     Transaction,
 )
+from app.models.password_reset import PasswordReset
 from app.models.planning import Allocation, Analysis, OptimizationRun

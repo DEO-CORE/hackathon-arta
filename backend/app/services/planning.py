@@ -1,10 +1,11 @@
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.errors import AppError, not_found
-from app.models import Material, Organization
+from app.models import Material, Organization, User
 from app.models.commerce import BuyerRequirement
 from app.models.planning import Allocation, OptimizationRun
 from app.schemas.commerce import RequirementOut
@@ -41,7 +42,10 @@ def inputs(db, user, ids):
             select(BuyerRequirement)
             .where(
                 BuyerRequirement.active.is_(True),
-                BuyerRequirement.organization_id != user.organization_id,
+                or_(
+                    BuyerRequirement.organization_id.is_(None),
+                    BuyerRequirement.organization_id != user.organization_id,
+                ),
             )
             .order_by(BuyerRequirement.id)
         ).all()
@@ -58,6 +62,12 @@ def inputs(db, user, ids):
             )
         )
     }
+    for r in requirements:
+        if r.organization_id is None:
+            buyer = db.get(User, r.user_id)
+            organizations[r.user_id] = SimpleNamespace(
+                name=buyer.profile_name, activity_type="other"
+            )
     return materials, requirements, organizations
 
 
@@ -71,7 +81,10 @@ def run_out(db, run):
         for r in db.scalars(
             select(BuyerRequirement).where(
                 BuyerRequirement.active.is_(True),
-                BuyerRequirement.organization_id != run.organization_id,
+                or_(
+                    BuyerRequirement.organization_id.is_(None),
+                    BuyerRequirement.organization_id != run.organization_id,
+                ),
             )
         )
     }

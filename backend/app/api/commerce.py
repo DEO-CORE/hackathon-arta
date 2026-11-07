@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.api.deps import CatalogUser, DbSession, EnterpriseUser, require_roles
 from app.models.commerce import BuyerRequirement, Reservation
@@ -23,6 +23,7 @@ from app.schemas.commerce import (
 )
 from app.schemas.material import Page
 from app.services import commerce as service
+from app.services.ownership import requirement_scope, reservation_scope
 
 router = APIRouter(tags=["Commerce"])
 BuyerUser = Annotated[object, Depends(require_roles(Role.buyer))]
@@ -38,7 +39,10 @@ OptionalKey = Annotated[
 @router.post("/buyer-requirements", status_code=201, response_model=RequirementOut)
 def create_requirement(data: RequirementCreate, user: BuyerUser, db: DbSession):
     r = BuyerRequirement(
-        **data.model_dump(), organization_id=user.organization_id, remaining_demand_kg=data.max_kg
+        **data.model_dump(),
+        organization_id=user.organization_id,
+        user_id=user.id,
+        remaining_demand_kg=data.max_kg,
     )
     db.add(r)
     db.commit()
@@ -62,13 +66,16 @@ def requirements(
 ):
     stmt = select(BuyerRequirement)
     if user.role == Role.buyer:
-        stmt = stmt.where(BuyerRequirement.organization_id == user.organization_id)
+        stmt = stmt.where(requirement_scope(BuyerRequirement, user))
         if active is not None:
             stmt = stmt.where(BuyerRequirement.active == active)
     else:
         stmt = stmt.where(
             BuyerRequirement.active.is_(True),
-            BuyerRequirement.organization_id != user.organization_id,
+            or_(
+                BuyerRequirement.organization_id.is_(None),
+                BuyerRequirement.organization_id != user.organization_id,
+            ),
         )
     if city:
         stmt = stmt.where(func.lower(BuyerRequirement.city) == city.strip().lower())
@@ -108,12 +115,7 @@ def reservations(
     status: Annotated[list[ReservationStatus] | None, Query()] = None,
     material_id: UUID | None = None,
 ):
-    owner = (
-        Reservation.seller_organization_id
-        if user.role == Role.enterprise
-        else Reservation.buyer_organization_id
-    )
-    stmt = select(Reservation).where(owner == user.organization_id)
+    stmt = select(Reservation).where(reservation_scope(Reservation, user))
     if status:
         stmt = stmt.where(Reservation.status.in_(status))
     if material_id:

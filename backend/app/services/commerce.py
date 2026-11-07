@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.errors import AppError, error_body, not_found, validation_error
-from app.models import Material, Organization
+from app.models import Material, Organization, User
 from app.models.commerce import (
     BuyerRequirement,
     IdempotencyRecord,
@@ -29,6 +29,7 @@ from app.schemas.commerce import (
 )
 from app.services.inventory import refresh_status
 from app.services.materials import BUYER_VISIBLE, get_owned, material_out, parse_uuid_or_404
+from app.services.ownership import owns_requirement, owns_reservation, requirement_scope
 
 
 def idempotent(db, user, operation, key, data, status, execute):
@@ -85,7 +86,7 @@ def patch_requirement(db, user, raw_id, data):
         select(BuyerRequirement)
         .where(
             BuyerRequirement.id == parse_uuid_or_404(raw_id),
-            BuyerRequirement.organization_id == user.organization_id,
+            requirement_scope(BuyerRequirement, user),
         )
         .with_for_update()
     )
@@ -120,8 +121,16 @@ def reservation_out(db, r, user):
         other = (
             r.buyer_organization_id if user.role == Role.enterprise else r.seller_organization_id
         )
-        org = db.get(Organization, other)
-        contacts = {k: getattr(org, k) for k in ("contact_name", "contact_phone", "contact_email")}
+        if other:
+            org = db.get(Organization, other)
+            contacts = {
+                k: getattr(org, k) for k in ("contact_name", "contact_phone", "contact_email")
+            }
+        else:
+            buyer = db.get(User, r.buyer_user_id)
+            contacts = dict(
+                contact_name=buyer.profile_name, contact_email=buyer.email, contact_phone=None
+            )
     return ReservationOut(
         **{
             k: getattr(r, k)
@@ -177,13 +186,15 @@ def create_reservation(db, user, data):
             .where(BuyerRequirement.id == data.requirement_id)
             .with_for_update()
         )
-        if req is None or req.organization_id != user.organization_id:
+        if req is None or not owns_requirement(req, user):
             raise not_found()
         check_requirement(req, m, data.quantity_kg, price)
     r = Reservation(
         material_id=m.id,
         seller_organization_id=m.organization_id,
         buyer_organization_id=user.organization_id,
+        buyer_user_id=user.id,
+        purpose=data.purpose,
         requirement_id=data.requirement_id,
         quantity_kg=data.quantity_kg,
         agreed_price_per_kg=price,
@@ -195,9 +206,7 @@ def create_reservation(db, user, data):
 
 def owned_reservation(db, user, raw_id):
     r = db.get(Reservation, parse_uuid_or_404(raw_id))
-    if r is None or user.organization_id != (
-        r.seller_organization_id if user.role == Role.enterprise else r.buyer_organization_id
-    ):
+    if r is None or not owns_reservation(r, user):
         raise not_found()
     return r
 

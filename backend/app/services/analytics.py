@@ -7,16 +7,12 @@ from app.models.commerce import ImpactRecord, Reservation, Transaction
 from app.models.common import utcnow
 from app.models.enums import Role
 from app.models.planning import OptimizationRun
+from app.services.ownership import reservation_scope
 from app.services.planning import run_out
 
 
 def summary(db, user, settings):
-    owner = (
-        Reservation.seller_organization_id
-        if user.role == Role.enterprise
-        else Reservation.buyer_organization_id
-    )
-    reservations = list(db.scalars(select(Reservation).where(owner == user.organization_id)))
+    reservations = list(db.scalars(select(Reservation).where(reservation_scope(Reservation, user))))
     states = {r.id: r.status for r in reservations}
     transactions = list(
         db.scalars(select(Transaction).where(Transaction.reservation_id.in_(states)))
@@ -81,6 +77,11 @@ def summary(db, user, settings):
     efficiency = distributed / totals["total_kg"] * 100 if totals["total_kg"] else Decimal(0)
     return {
         **result,
+        "active_reservations_count": sum(
+            r.status in ("pending", "confirmed", "transferred") for r in reservations
+        ),
+        "held_kg": f"{totals['held_kg']:.3f}",
+        "transferred_kg": f"{totals['transferred_kg']:.3f}",
         "registered_kg": f"{totals['total_kg']:.3f}",
         "available_kg": f"{totals['available_kg']:.3f}",
         "distributed_kg": f"{distributed:.3f}",

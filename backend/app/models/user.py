@@ -18,6 +18,11 @@ class User(Base):
     role: Mapped[Role] = mapped_column(
         Enum(Role, native_enum=False, create_constraint=True, length=16, name="role")
     )
-    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
+    profile_name: Mapped[str | None] = mapped_column(String(200))
+    profile_city: Mapped[str | None] = mapped_column(String(100))
+    token_version: Mapped[int] = mapped_column(default=0, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

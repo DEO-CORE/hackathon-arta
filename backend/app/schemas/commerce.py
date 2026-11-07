@@ -1,8 +1,9 @@
 from datetime import date
+from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, computed_field, model_validator
 
 from app.models.enums import MaterialCondition, MaterialType
 from app.schemas.material import MaterialOut
@@ -72,7 +73,8 @@ class RequirementPatch(StrictIn):
 
 class RequirementPublic(OutModel):
     id: UUID
-    organization_id: UUID
+    organization_id: UUID | None
+    user_id: UUID | None = None
     material_types: list[MaterialType]
     conditions: list[MaterialCondition]
     min_kg: MassOut
@@ -90,6 +92,7 @@ class RequirementOut(RequirementPublic):
 
 
 class ReservationCreate(StrictIn):
+    purpose: trimmed(500) | None = None
     material_id: UUID
     requirement_id: UUID | None = None
     quantity_kg: PositiveMass
@@ -124,7 +127,9 @@ class ReservationOut(OutModel):
     material_id: UUID
     material_name: str
     seller_organization_id: UUID
-    buyer_organization_id: UUID
+    buyer_organization_id: UUID | None
+    buyer_user_id: UUID | None = None
+    purpose: str | None = None
     requirement_id: UUID | None
     quantity_kg: MassOut
     agreed_price_per_kg: MoneyOut | None
@@ -135,6 +140,13 @@ class ReservationOut(OutModel):
     counterparty_contacts: dict[str, str | None] | None
     created_at: UtcDateTime
     updated_at: UtcDateTime
+
+    @computed_field
+    @property
+    def requested_sale_amount_kgs(self) -> MoneyOut | None:
+        if self.agreed_price_per_kg is None:
+            return None
+        return (self.quantity_kg * self.agreed_price_per_kg).quantize(Decimal(".01"))
 
 
 class InternalUse(StrictIn):

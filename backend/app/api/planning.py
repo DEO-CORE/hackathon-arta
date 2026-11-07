@@ -117,3 +117,15 @@ def get_analysis(id: str, user: EnterpriseUser, db: DbSession):
         "requires_confirmation": True,
         "result": job.validated_result,
     }
+
+
+@router.get("/materials/{id}/analysis", response_model=AnalysisOut | None)
+def latest_analysis(id: str, user: EnterpriseUser, db: DbSession):
+    material = get_owned(db, user, id)
+    job = db.scalar(
+        select(Analysis)
+        .where(Analysis.material_id == material.id)
+        .order_by(Analysis.created_at.desc(), Analysis.id)
+        .limit(1)
+    )
+    return get_analysis(str(job.id), user, db) if job else None
