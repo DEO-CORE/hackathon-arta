@@ -63,7 +63,7 @@ export default function Footer() {
         <div className="footer-legal">
           <span>© {new Date().getFullYear()} ARTA</span>
           <span aria-hidden="true">·</span>
-          <span>{t("Создано в Кыргызстане")}</span>
+          <span>{t("Создано командой DEO-CORE")}</span>
         </div>
       </div>
     </footer>
