@@ -1,0 +1,209 @@
+.catalog-hero {
+  position: relative;
+  background: #f1f2ed;
+  margin-bottom: 55px;
+  padding: 35px 0 55px;
+}
+.catalog-hero::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 43%;
+  height: 55px;
+  border-bottom-left-radius: 70px;
+  background: #f1f2ed;
+}
+.catalog-hero-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 50px;
+}
+.catalog-hero-inner > div {
+  text-align: center;
+}
+.catalog-hero h1 {
+  font-size: 43px;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+.catalog-hero p {
+  margin: 23px 0 26px;
+  font-size: 16px;
+  color: #476056;
+}
+.catalog-hero img {
+  width: 360px;
+  aspect-ratio: 1;
+  height: auto;
+  object-fit: cover;
+  border-radius: 50%;
+  margin-inline: auto;
+}
+.catalog-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 35px;
+  margin-bottom: 40px;
+}
+.catalog-section-heading h2 {
+  font-size: 31px;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+}
+.catalog-section-heading p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #476056;
+  padding-left: 35px;
+  position: relative;
+}
+.catalog-section-heading p::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 55px;
+  background: #466358;
+  transform: translateY(-50%) rotate(30deg);
+}
+.catalog-filter-panel {
+  background: #213e34;
+  color: #fff;
+  padding: 35px;
+  border-radius: 25px;
+}
+.catalog-filter-panel .search-field,
+.catalog-filter-panel .catalog-city {
+  border: 1px solid #91a695;
+  border-radius: 30px;
+}
+.catalog-filter-panel input::placeholder {
+  color: #d0dbd1;
+  opacity: 1;
+}
+.catalog-filter-panel select option {
+  color: #213e34;
+  background: white;
+}
+.catalog-filter-panel .filter-chip {
+  background: transparent;
+  color: #ebefe7;
+  border-color: #738e78;
+  min-height: 44px;
+  padding: 10px 18px;
+}
+.catalog-filter-panel .filter-chip.selected {
+  background: #f08331;
+  border-color: #f08331;
+  color: #1c1b1f;
+}
+.catalog-filter-panel .filter-chip:hover {
+  background: #466358;
+}
+.catalog-filter-panel .filter-chip.selected:hover {
+  background: #f5ad76;
+}
+.catalog-filter-panel .search-field:focus-within,
+.catalog-filter-panel .catalog-city:focus-within {
+  box-shadow: 0 0 0 2px #f5ad76;
+}
+.catalog-filter-panel :focus-visible {
+  outline-color: #f5ad76;
+}
+.material-card-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  min-height: 44px;
+  background: #f08331;
+  color: #1c1b1f;
+  font-size: 12px;
+  border-radius: 30px;
+  padding: 10px 19px;
+  margin-top: 20px;
+}
+.material-card-link:hover {
+  background: #f5ad76;
+}
+@media (max-width: 800px) {
+  .catalog-hero-inner {
+    gap: 25px;
+  }
+  .catalog-hero h1 {
+    font-size: 32px;
+  }
+  .catalog-hero p {
+    font-size: 13px;
+  }
+  .catalog-hero img {
+    width: 270px;
+  }
+  .catalog-section-heading {
+    flex-wrap: wrap;
+    gap: 25px;
+  }
+  .catalog-section-heading h2 {
+    font-size: 28px;
+  }
+  .catalog-filter-panel {
+    padding: 25px;
+  }
+  .catalog-filter-panel .catalog-toolbar {
+    grid-template-columns: 1fr 180px;
+  }
+}
+@media (max-width: 560px) {
+  .catalog-hero {
+    padding-top: 25px;
+    padding-bottom: 35px;
+    margin-bottom: 35px;
+  }
+  .catalog-hero::after {
+    height: 35px;
+  }
+  .catalog-hero-inner {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .catalog-hero h1 {
+    font-size: 32px;
+  }
+  .catalog-hero p {
+    margin-block: 16px 20px;
+  }
+  .catalog-hero img {
+    width: 200px;
+  }
+  .catalog-section-heading {
+    gap: 18px;
+    margin-bottom: 27px;
+  }
+  .catalog-section-heading p {
+    padding-left: 20px;
+    font-size: 12px;
+  }
+  .catalog-section-heading p::before {
+    height: 36px;
+    left: 5px;
+    transform: translateY(-50%) rotate(20deg);
+  }
+  .catalog-filter-panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+  .catalog-filter-panel .catalog-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .catalog-filter-panel .filter-chip {
+    font-size: 11px;
+    padding-inline: 13px;
+  }
+  .catalog-filter-panel input,
+  .catalog-filter-panel select {
+    font-size: 16px;
+  }
+}

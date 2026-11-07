@@ -1,0 +1,209 @@
+/* Shared frames for the landing sections and footer. Interior compositions
+   keep their own layout; dialogs and the card shuffle must not be clipped. */
+body {
+  background: #f1f2ed;
+}
+
+:root {
+  --section-frame-width: min(1240px, calc(100% - 96px));
+  --section-frame-radius: 32px;
+  --section-frame-gap: 28px;
+  --section-frame-padding: clamp(34px, 4.4vw, 64px);
+  --section-frame-padding-inline: var(--section-frame-padding);
+  --section-frame-border: #e4e8df;
+}
+
+.home-page.home-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-frame-gap);
+  padding-top: 8px;
+  background: #f1f2ed;
+}
+.home-page.home-blocks > section {
+  width: var(--section-frame-width);
+  max-width: none;
+  margin: 0 auto;
+  padding: var(--section-frame-padding) var(--section-frame-padding-inline);
+  border: 1px solid var(--section-frame-border);
+  border-radius: var(--section-frame-radius);
+  background: #fff;
+}
+.home-blocks > #benefits,
+.home-blocks > #faq {
+  padding-block: var(--section-frame-padding);
+}
+.home-blocks > section > .container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.home-blocks .home-hero::after,
+.home-blocks .home-process::after,
+.home-blocks .home-insights::before,
+.home-blocks .home-story::before {
+  content: none;
+}
+.home-blocks .home-heading {
+  flex-wrap: wrap;
+  margin-bottom: 44px;
+}
+.home-blocks .home-hero-stock,
+.home-blocks .home-hero-product,
+.home-blocks .home-guide {
+  background: #f1f2ed;
+}
+.home-blocks .home-hero-ornaments span:nth-child(3) {
+  background: #f1f2ed;
+}
+.home-blocks .home-story {
+  padding-block: 0;
+}
+.home-blocks .home-story-image {
+  margin-left: 0;
+}
+.home-blocks .home-process-layout {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(24px, 3vw, 44px);
+}
+.home-blocks .home-process-counter {
+  transform: none;
+}
+.home-blocks .home-benefit {
+  padding-inline: clamp(20px, 2vw, 28px);
+}
+.home-blocks .home-benefit h3 {
+  font-size: clamp(20px, 1.65vw, 24px);
+}
+.home-blocks .home-capsule-dark,
+.home-blocks .home-benefit-round {
+  margin-top: auto;
+  flex-shrink: 0;
+}
+.home-blocks .home-audience-card {
+  padding-inline: 24px;
+}
+.home-blocks .home-plans {
+  isolation: isolate;
+  padding-inline: 5%;
+}
+
+.footer.site-footer {
+  border-radius: 0;
+  padding-block: var(--section-frame-gap);
+}
+.site-footer .footer-card {
+  width: var(--section-frame-width);
+  max-width: none;
+  border-radius: var(--section-frame-radius);
+  border-color: var(--section-frame-border);
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --section-frame-width: calc(100% - 56px);
+    --section-frame-padding: 34px;
+  }
+  .home-blocks .home-hero-ornaments {
+    display: none;
+  }
+  .home-blocks .home-hero-collage {
+    margin-top: 32px;
+  }
+  .home-blocks .home-benefits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+  .home-blocks .home-benefit {
+    padding-inline: 28px;
+  }
+  .home-blocks .home-plans {
+    padding-inline: 0;
+  }
+}
+@media (max-width: 800px) {
+  :root {
+    --section-frame-gap: 22px;
+  }
+  .home-blocks .home-heading {
+    margin-bottom: 34px;
+  }
+  .home-blocks .home-audience-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-blocks .home-audience-card > p {
+    min-height: 0;
+  }
+  .home-blocks .home-guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-blocks .home-guide > img {
+    aspect-ratio: 1.8;
+  }
+  .home-blocks .home-guide h3 {
+    font-size: 24px;
+  }
+}
+@media (max-width: 560px) {
+  :root {
+    --section-frame-width: calc(100% - 36px);
+    --section-frame-radius: 26px;
+    --section-frame-gap: 18px;
+    --section-frame-padding: 28px;
+    --section-frame-padding-inline: 20px;
+  }
+  .home-blocks .home-heading {
+    margin-bottom: 28px;
+  }
+  .home-blocks .home-heading h2 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .home-blocks .home-process-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .home-blocks .home-story-image {
+    margin-inline: auto;
+  }
+  .home-blocks .home-benefits {
+    gap: 12px;
+  }
+  .home-blocks .home-benefit {
+    padding: 24px 12px;
+  }
+  .home-blocks .home-benefit h3 {
+    font-size: 18px;
+    overflow-wrap: anywhere;
+  }
+  .home-blocks .home-benefit p {
+    overflow-wrap: anywhere;
+  }
+  .home-blocks .home-material-row {
+    padding: 20px 16px;
+    gap: 12px;
+  }
+  .home-blocks .home-material-row img {
+    width: 80px;
+    height: 80px;
+  }
+  .home-blocks .home-material-row h3 {
+    font-size: 17px;
+  }
+  .home-blocks .home-faq {
+    padding-inline: 12px;
+  }
+  .home-blocks .home-faq > p {
+    margin-left: 0;
+  }
+  .home-blocks .home-audience-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-blocks .home-audience-card h3 {
+    flex-direction: row;
+    align-items: center;
+  }
+  .home-blocks .home-guide > img {
+    aspect-ratio: 1.4;
+  }
+}

@@ -1,0 +1,238 @@
+/* Application screens share the landing/footer frame tokens. Keep overflow
+   visible so focus outlines, sticky panels and dialogs work within the cards. */
+.page-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-frame-gap);
+  width: var(--section-frame-width);
+  max-width: none;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 8px 0 0;
+}
+.page-blocks .page-block {
+  min-width: 0;
+  margin: 0;
+  padding: var(--section-frame-padding) var(--section-frame-padding-inline);
+  border: 1px solid var(--section-frame-border);
+  border-radius: var(--section-frame-radius);
+  background: #fff;
+}
+.page-block > .container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.page-blocks .page-heading,
+.page-blocks .requests-toolbar {
+  margin-top: 0;
+}
+.page-blocks h1,
+.page-blocks h2,
+.page-blocks h3 {
+  overflow-wrap: anywhere;
+}
+.page-blocks .empty-page-block {
+  display: grid;
+  align-content: center;
+  min-height: 55vh;
+}
+.empty-page-block .empty-state {
+  padding-inline: 0;
+  border: 0;
+}
+
+.page-blocks .catalog-hero::after {
+  content: none;
+}
+.page-blocks .catalog-hero-inner {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px;
+}
+.page-blocks .catalog-hero img {
+  max-width: 100%;
+}
+.page-blocks .catalog-section-heading {
+  flex-wrap: wrap;
+}
+.page-blocks .catalog-filter-panel {
+  padding: 28px;
+}
+.page-blocks .catalog-results-bar {
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.page-blocks .detail-grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: clamp(28px, 4vw, 56px);
+}
+.page-blocks .detail-reuse {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 32px;
+}
+.page-blocks .detail-info {
+  min-width: 0;
+}
+.page-blocks .detail-aside {
+  padding: 14px 0;
+}
+
+.page-blocks .create-heading-block .page-heading {
+  margin-bottom: 0;
+}
+.page-blocks .create-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--section-frame-gap);
+}
+.page-blocks .create-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--section-frame-gap);
+}
+.page-blocks .create-grid .page-block {
+  padding: 32px;
+}
+.page-blocks .create-aside .reuse-panel {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.page-blocks .create-aside .form-tip {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f1f2ed;
+  border-radius: 18px;
+}
+.page-blocks .create-aside .form-tip > svg {
+  flex-shrink: 0;
+}
+.page-blocks .form-two-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.page-blocks .stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.page-blocks .requests-content .empty-state {
+  border: 0;
+  background: #f1f2ed;
+}
+.page-blocks .request-card {
+  background: #fff;
+}
+.page-blocks .auth-layout {
+  gap: clamp(32px, 4vw, 56px);
+}
+.page-blocks .auth-panel {
+  padding-top: 0;
+}
+.page-blocks .auth-block .auth-back {
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1000px) {
+  .page-blocks .detail-grid,
+  .page-blocks .detail-reuse {
+    gap: 28px;
+  }
+  .page-blocks .create-grid {
+    grid-template-columns: 1fr;
+  }
+  .page-blocks .create-aside {
+    position: static;
+    grid-row: auto;
+  }
+  .page-blocks .request-card-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+  .page-blocks .request-card-top .status-badge {
+    grid-column: 1 / -1;
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+  }
+}
+@media (max-width: 800px) {
+  .page-blocks .detail-grid,
+  .page-blocks .detail-reuse {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page-blocks .detail-photo {
+    position: relative;
+    top: auto;
+  }
+  .page-blocks .detail-photo > img {
+    max-height: 480px;
+    aspect-ratio: 1.35;
+  }
+  .page-blocks .catalog-filter-panel {
+    padding: 22px;
+  }
+}
+@media (max-width: 560px) {
+  .page-blocks .catalog-hero-inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+  .page-blocks .catalog-hero h1 {
+    font-size: 30px;
+  }
+  .page-blocks .catalog-filter-panel {
+    padding: 16px;
+  }
+  .page-blocks .catalog-filter-panel .search-field {
+    padding-inline: 12px;
+    gap: 8px;
+  }
+  .page-blocks .catalog-filter-panel input {
+    min-width: 0;
+  }
+  .page-blocks .create-grid .page-block {
+    padding: 28px var(--section-frame-padding-inline);
+  }
+  .page-blocks .form-two-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page-blocks .stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .page-blocks .stat-card {
+    padding: 24px;
+  }
+  .page-blocks .request-card {
+    padding: 20px 14px;
+  }
+  .page-blocks .request-progress {
+    row-gap: 14px;
+  }
+  .page-blocks .auth-roles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page-blocks .auth-role {
+    padding: 16px;
+  }
+  .page-blocks .auth-role-top {
+    margin-bottom: 10px;
+  }
+  .page-blocks .auth-heading h1,
+  .page-blocks .auth-complete h1 {
+    font-size: 30px;
+  }
+  .page-blocks .detail-info h1,
+  .page-blocks .page-heading h1 {
+    font-size: 32px;
+  }
+  .page-blocks .reuse-panel {
+    padding: 22px 16px;
+  }
+}
+@media (max-width: 400px) {
+  .page-blocks .request-progress {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
