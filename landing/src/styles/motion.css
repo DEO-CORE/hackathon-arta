@@ -1,0 +1,176 @@
+.motion-card-stack {
+  touch-action: pan-y;
+  isolation: isolate;
+}
+.motion-card-stack .home-process-photo {
+  transition: none;
+  user-select: none;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+.home-process-text {
+  position: relative;
+}
+.home-process-number {
+  display: inline-block;
+}
+.process-copy-ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.process-copy-ghost:empty {
+  display: none;
+}
+.home-process-counter {
+  display: flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.process-counter-window {
+  position: relative;
+  display: inline-flex;
+  overflow: clip;
+}
+.process-counter-outgoing {
+  position: absolute;
+  inset: 0;
+}
+.process-counter-outgoing::before {
+  content: attr(data-number);
+}
+.process-counter-current {
+  display: inline-block;
+}
+.home-process-layout:focus-visible {
+  outline: 2px solid #9a3f00;
+  outline-offset: 12px;
+  border-radius: 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .desktop-nav a,
+  .header-login,
+  .footer-links a {
+    transition: color 180ms ease;
+  }
+  .footer-links a svg {
+    transition: transform 220ms cubic-bezier(0.22, 0.68, 0.2, 1);
+  }
+  .mobile-nav {
+    animation: navigation-enter 220ms ease-out both;
+  }
+  [data-reveal] {
+    transition:
+      opacity 0.65s ease,
+      translate 0.65s cubic-bezier(0.22, 0.75, 0.2, 1);
+  }
+  [data-reveal="pending"] {
+    opacity: 0;
+    translate: 0 26px;
+    pointer-events: none;
+  }
+  [data-reveal="visible"] {
+    opacity: 1;
+    translate: 0 0;
+  }
+  /* Interactive cards fade in without moving their controls during a click. */
+  [data-reveal]:not(.home-heading) {
+    translate: none;
+  }
+  .home-hero-intro {
+    animation: soft-enter 0.8s both;
+  }
+  .home-hero-collage {
+    animation: soft-enter 0.85s 0.12s both;
+  }
+  .auth-form-content,
+  .auth-complete {
+    animation: soft-enter 0.4s both;
+  }
+  .home-hero-ornaments span:nth-child(1) {
+    animation: ornament-sway 5s ease-in-out 2;
+  }
+  .home-hero-ornaments span:nth-child(3) {
+    animation: ornament-sway 5s 1s ease-in-out 2;
+  }
+  .home-process-controls button,
+  .home-material-row,
+  .home-guide,
+  .home-audience-card {
+    transition:
+      transform 0.25s ease,
+      background 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+  .button svg,
+  .text-link svg,
+  .home-material-feature > span > span svg {
+    transition: transform 0.25s ease;
+  }
+  .button:hover svg,
+  .text-link:hover svg,
+  .home-material-feature:hover > span > span svg {
+    transform: translateX(3px);
+  }
+  .home-process-controls button:active {
+    transform: scale(0.93);
+  }
+  .home-process-controls button svg {
+    transition: transform 0.3s cubic-bezier(0.22, 0.68, 0.2, 1);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .footer-links a:hover svg {
+      transform: translate(2px, -2px);
+    }
+    .home-process-controls button:hover {
+      box-shadow: 0 5px 12px #213e3414;
+    }
+    .home-process-controls button:first-child:hover svg {
+      transform: translateX(-3px);
+    }
+    .home-process-controls button:last-child:hover svg {
+      transform: translateX(3px);
+    }
+    .home-material-row:hover,
+    .home-guide:hover,
+    .home-audience-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 30px #213e3409;
+    }
+  }
+}
+@keyframes navigation-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes soft-enter {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes ornament-sway {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    translate: none;
+  }
+}
