@@ -1,0 +1,62 @@
+{
+  "_note": "Синтетический пример для офлайн-демо. Не результат анализа реального фото.",
+  "id": "00000000-0000-4000-8000-00000000d3a0",
+  "material_id": "00000000-0000-4000-8000-00000000d3a1",
+  "status": "succeeded",
+  "input_version": 1,
+  "is_current": true,
+  "mode": "demo",
+  "schema_version": "1.0",
+  "provider": "demo-fixture",
+  "model": "none",
+  "requires_confirmation": true,
+  "result": {
+    "visual_features": {
+      "color": {
+        "primary": "gray",
+        "secondary": ["white"],
+        "description": "светло-серый, местами светлее",
+        "confidence": "medium"
+      },
+      "pattern": {
+        "value": "solid",
+        "description": "однотонное полотно без рисунка",
+        "confidence": "high"
+      },
+      "apparent_texture": {
+        "value": "knit_looking",
+        "description": "на вид трикотажное полотно с мелкой петельной структурой",
+        "confidence": "medium"
+      }
+    },
+    "reuse_options": [
+      {
+        "reuse_type": "cleaning_rags",
+        "suitability": "high",
+        "reason": "Однотонные мягкие на вид обрезки удобно нарезать на ровные куски для протирочных тканей."
+      },
+      {
+        "reuse_type": "patchwork_crafts",
+        "suitability": "medium",
+        "reason": "Спокойный однотонный цвет сочетается с другими тканями в лоскутных изделиях."
+      },
+      {
+        "reuse_type": "stuffing_filling",
+        "suitability": "medium",
+        "reason": "Мелкие обрезки можно использовать как наполнитель для мягких изделий."
+      },
+      {
+        "reuse_type": "recycling_shredding",
+        "suitability": "low",
+        "reason": "Если обрезки не найдут другого применения, их можно отправить на измельчение."
+      }
+    ],
+    "notes": null
+  },
+  "composition": "unknown",
+  "error_code": null,
+  "confirmed_at": null,
+  "confirmed_by": null,
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}
