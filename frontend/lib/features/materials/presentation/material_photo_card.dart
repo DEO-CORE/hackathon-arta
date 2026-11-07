@@ -27,7 +27,6 @@ class MaterialPhotoCard extends StatelessWidget {
     final meta = [
       if (typeLine.isNotEmpty) typeLine,
       '$city · $price',
-      if (item.organizationName != null) item.organizationName!,
     ].join('\n');
     final highlight = item.status == MaterialStatus.draft
         ? 'Масса: ${formatKg(item.balance?.totalKg ?? item.availableKg)}'

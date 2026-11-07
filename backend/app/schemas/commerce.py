@@ -119,12 +119,31 @@ class TransactionOut(OutModel):
     created_at: UtcDateTime
 
 
+class TransactionViewOut(OutModel):
+    """Transaction with the public material fields only (same shape for both sides)."""
+
+    id: UUID
+    reservation_id: UUID
+    material_id: UUID
+    material_name: str
+    material_type: MaterialType
+    material_city: str
+    status: ReservationStatus
+    transferred_kg: MassOut
+    sale_amount_kgs: MoneyOut
+    transfer_confirmed_at: UtcDateTime | None
+    receipt_confirmed_at: UtcDateTime | None
+    confirmed_reuse_kg: MassOut
+    created_at: UtcDateTime
+
+
 class ReservationOut(OutModel):
     id: UUID
     material_id: UUID
     material_name: str
     seller_organization_id: UUID
     buyer_organization_id: UUID
+    buyer_organization_name: str | None  # supplier side only
     requirement_id: UUID | None
     quantity_kg: MassOut
     agreed_price_per_kg: MoneyOut | None

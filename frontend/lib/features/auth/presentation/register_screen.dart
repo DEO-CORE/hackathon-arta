@@ -60,14 +60,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Registration succeeded: continue with the email confirmation step.
+    ref.listen(pendingEmailProvider, (prev, next) {
+      if (next != null && prev == null) context.go('/verify-email');
+    });
     final form = ref.watch(authFormProvider);
     final busy = form.submitting;
     final fe = form.error?.fieldErrors ?? const <String, String>{};
-    return Scaffold(
-      appBar: AppBar(title: const Text('Регистрация')),
+    return AppAuthBackground(
+        child: Scaffold(
+      backgroundColor: Colors.transparent,
+      // Pinned primary action; disabled until the form can be valid.
+      bottomNavigationBar: AppBottomBar(
+        child: ListenableBuilder(
+          listenable: Listenable.merge([_email, _password, _orgName, _city]),
+          builder: (context, _) => AppButton(
+            label: 'Продолжить',
+            loading: busy,
+            loadingLabel: 'Отправка…',
+            onPressed: validateEmail(_email.text) == null &&
+                    validateNewPassword(_password.text) == null &&
+                    validateRequired(_orgName.text, emptyMessage: '') == null &&
+                    validateRequired(_city.text, max: 100, emptyMessage: '') ==
+                        null
+                ? _submit
+                : null,
+          ),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: AppContentColumn(
             maxWidth: 420,
             child: Form(
@@ -76,6 +99,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const AppBrandBlock(centered: true, tagline: false),
+                  const SizedBox(height: AppSpacing.xl),
+                  Text('Регистрация',
+                      style: AppTypography.display
+                          .copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('Создайте аккаунт организации',
+                      style: AppTypography.body
+                          .copyWith(color: AppColors.textSecondary)),
+                  const SizedBox(height: AppSpacing.lg),
                   if (form.error != null) ...[
                     ErrorBanner(error: form.error!),
                     const SizedBox(height: AppSpacing.lg),
@@ -107,6 +140,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
                     label: 'Email',
+                    prefixIcon: Icons.mail,
                     errorText: fe['email'],
                     validator: validateEmail,
                   ),
@@ -117,6 +151,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     obscureText: true,
                     autofillHints: const [AutofillHints.newPassword],
                     label: 'Пароль',
+                    prefixIcon: Icons.lock,
                     helper: 'От 10 символов',
                     errorText: fe['password'],
                     validator: validateNewPassword,
@@ -155,12 +190,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   AppButton(
-                    label: 'Зарегистрироваться',
-                    loading: busy,
-                    loadingLabel: 'Отправка…',
-                    onPressed: _submit,
-                  ),
-                  AppButton(
                     label: 'Уже есть аккаунт? Войти',
                     kind: AppButtonKind.text,
                     onPressed: busy ? null : () => context.go('/login'),
@@ -171,6 +200,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }

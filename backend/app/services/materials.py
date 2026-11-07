@@ -4,12 +4,12 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, not_found
 from app.integrations.storage import ObjectStorage
-from app.models import Material, MaterialImage, Organization, User
+from app.models import Material, MaterialImage, User
 from app.models.common import utcnow
 from app.models.enums import MaterialCondition, MaterialStatus, MaterialType, Role
 from app.schemas.material import (
@@ -64,11 +64,10 @@ def material_out(m: Material) -> MaterialOut:
     )
 
 
-def public_out(m: Material, organization_name: str) -> MaterialPublicOut:
+def public_out(m: Material) -> MaterialPublicOut:
     return MaterialPublicOut(
         id=m.id,
         organization_id=m.organization_id,
-        organization_name=organization_name,
         name=m.name,
         material_type=m.material_type,
         composition=m.composition,
@@ -113,18 +112,16 @@ def get_for_user(db: Session, user: User, raw_id: str) -> MaterialOut | Material
     material_id = parse_uuid_or_404(raw_id)
     if user.role == Role.enterprise:
         return material_out(get_owned(db, user, raw_id))
-    row = db.execute(
-        select(Material, Organization.name)
-        .join(Organization, Organization.id == Material.organization_id)
-        .where(
+    material = db.scalar(
+        select(Material).where(
             Material.id == material_id,
             Material.status.in_(BUYER_VISIBLE),
             Material.available_kg > 0,
         )
-    ).first()
-    if row is None:
+    )
+    if material is None:
         raise not_found()
-    return public_out(row[0], row[1])
+    return public_out(material)
 
 
 # ---------- list ----------
@@ -138,11 +135,20 @@ class MaterialListQuery(BaseModel):
     condition: list[MaterialCondition] = Field(default_factory=list)
     city: trimmed(100) | None = None
     min_available_kg: Mass | None = None
+    max_available_kg: Mass | None = None
     max_price_per_kg: Money | None = None
     q: trimmed(100) | None = None
-    sort: Literal["created_at_desc", "created_at_asc", "price_asc", "available_kg_desc"] = (
-        "created_at_desc"
-    )
+    min_kg: Mass | None = None  # alias of min_available_kg
+    max_kg: Mass | None = None  # alias of max_available_kg
+    sort: Literal[
+        "created_at_desc",
+        "created_at_asc",
+        "price_asc",
+        "available_kg_desc",
+        "created_desc",
+        "mass_desc",
+        "mass_asc",
+    ] = "created_at_desc"
 
 
 def _escape_like(s: str) -> str:
@@ -165,12 +171,22 @@ def list_materials(db: Session, user: User, q: MaterialListQuery) -> Page[Any]:
         stmt = stmt.where(Material.condition.in_(q.condition))
     if q.city:
         stmt = stmt.where(func.lower(Material.city) == q.city.lower())
-    if q.min_available_kg is not None:
-        stmt = stmt.where(Material.available_kg >= q.min_available_kg)
+    low = q.min_available_kg if q.min_available_kg is not None else q.min_kg
+    high = q.max_available_kg if q.max_available_kg is not None else q.max_kg
+    if low is not None:
+        stmt = stmt.where(Material.available_kg >= low)
+    if high is not None:
+        stmt = stmt.where(Material.available_kg <= high)
     if q.max_price_per_kg is not None:
         stmt = stmt.where(Material.price_per_kg <= q.max_price_per_kg)  # NULL price excluded
     if q.q:
-        stmt = stmt.where(Material.name.ilike(f"%{_escape_like(q.q)}%", escape="\\"))
+        pattern = f"%{_escape_like(q.q)}%"
+        stmt = stmt.where(
+            or_(
+                Material.name.ilike(pattern, escape="\\"),
+                cast(Material.material_type, String).ilike(pattern, escape="\\"),
+            )
+        )
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     order = {
@@ -178,6 +194,9 @@ def list_materials(db: Session, user: User, q: MaterialListQuery) -> Page[Any]:
         "created_at_asc": [Material.created_at.asc()],
         "price_asc": [Material.price_per_kg.asc().nulls_last(), Material.created_at.desc()],
         "available_kg_desc": [Material.available_kg.desc(), Material.created_at.desc()],
+        "created_desc": [Material.created_at.desc()],
+        "mass_desc": [Material.available_kg.desc(), Material.created_at.desc()],
+        "mass_asc": [Material.available_kg.asc(), Material.created_at.desc()],
     }[q.sort]
     stmt = stmt.order_by(*order, Material.id.asc())
     stmt = stmt.limit(q.page_size).offset((q.page - 1) * q.page_size)
@@ -186,13 +205,7 @@ def list_materials(db: Session, user: User, q: MaterialListQuery) -> Page[Any]:
     if user.role == Role.enterprise:
         items: list[Any] = [material_out(m) for m in materials]
     else:
-        org_ids = {m.organization_id for m in materials}
-        names = dict(
-            db.execute(
-                select(Organization.id, Organization.name).where(Organization.id.in_(org_ids))
-            ).all()
-        )
-        items = [public_out(m, names.get(m.organization_id, "")) for m in materials]
+        items = [public_out(m) for m in materials]
     return Page(items=items, page=q.page, page_size=q.page_size, total=total)
 
 
@@ -243,8 +256,15 @@ def _invalidate_inputs(m: Material) -> None:
         m.status = MaterialStatus.draft
 
 
+def _require_edit_rights(user, m: Material) -> None:
+    """MEMBER may change drafts only (authorization precedes version/state checks)."""
+    if m.status != MaterialStatus.draft and not user.can("material.edit_published"):
+        raise AppError(403, "FORBIDDEN")
+
+
 def patch_material(db: Session, user: User, raw_id: str, data: MaterialPatchIn) -> Material:
     m = get_owned(db, user, raw_id, lock=True)
+    _require_edit_rights(user, m)
     sent = data.model_fields_set
     changes = {
         f: getattr(data, f) for f in ("name", "price_per_kg", *CHARACTERISTIC_FIELDS) if f in sent
@@ -424,7 +444,9 @@ def _check_can_add_image(m: Material) -> None:
 
 def precheck_image_upload(db: Session, user: User, raw_id: str) -> None:
     """Ownership and limits before the file body is processed (order from api.md 18.7)."""
-    _check_can_add_image(get_owned(db, user, raw_id))
+    m = get_owned(db, user, raw_id)
+    _require_edit_rights(user, m)
+    _check_can_add_image(m)
     db.rollback()  # end the read transaction; add_image re-reads under a lock
 
 
@@ -441,6 +463,7 @@ def add_image(
     stored = False
     try:
         m = get_owned(db, user, raw_id, lock=True)
+        _require_edit_rights(user, m)
         _check_can_add_image(m)  # re-check under the lock: concurrent uploads
         storage.put(checked.key, checked.data, checked.mime_type)
         stored = True

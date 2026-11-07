@@ -2,6 +2,7 @@
 
 import argparse
 import getpass
+from datetime import UTC, datetime
 
 from pydantic import TypeAdapter
 from sqlalchemy import select
@@ -9,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.db.session import get_engine
-from app.models import Organization, User
+from app.models import Organization, PlatformAdmin, User
 from app.models.enums import ActivityType, Role
 from app.schemas.types import Email
+from app.services import audit
 
 
 def main():
@@ -32,14 +34,24 @@ def main():
         )
         db.add(org)
         db.flush()
-        db.add(
-            User(
-                email=email,
-                password_hash=hash_password(password),
-                role=Role.admin,
-                organization_id=org.id,
-                active=True,
-            )
+        admin_user = User(
+            email=email,
+            password_hash=hash_password(password),
+            role=Role.admin,
+            organization_id=org.id,
+            active=True,
+            email_confirmed=True,
+            email_confirmed_at=datetime.now(UTC),
+        )
+        db.add(admin_user)
+        db.flush()
+        # Platform admin is a separate mechanism: no organization membership, no kind.
+        db.add(PlatformAdmin(user_id=admin_user.id))
+        audit.record(
+            db,
+            "platform_admin.created",
+            target_type="user",
+            target_id=admin_user.id,
         )
         db.commit()
     print(f"Администратор {email} создан. Вход: /admin")

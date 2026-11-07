@@ -20,6 +20,7 @@ class AppTextField extends StatelessWidget {
     this.onChanged,
     this.suffixText,
     this.suffix,
+    this.prefixIcon,
     this.autovalidateMode,
     this.autofillHints,
     this.textInputAction,
@@ -39,6 +40,7 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final String? suffixText;
   final Widget? suffix;
+  final IconData? prefixIcon;
   final AutovalidateMode? autovalidateMode;
   final Iterable<String>? autofillHints;
   final TextInputAction? textInputAction;
@@ -69,6 +71,8 @@ class AppTextField extends StatelessWidget {
         errorMaxLines: 3,
         suffixText: suffixText,
         suffixIcon: suffix,
+        prefixIcon:
+            prefixIcon == null ? null : Icon(prefixIcon, color: AppColors.text),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       ),

@@ -8,9 +8,12 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/session/session.dart';
+import '../../auth/models/auth_models.dart';
 import '../../../demo/demo_material_repository.dart';
 import '../../../demo/demo_store.dart';
 import '../data/material_repository.dart';
+import '../models/catalog_filter.dart';
 import '../models/material_enums.dart';
 import '../models/material_input.dart';
 import '../models/material_models.dart';
@@ -30,7 +33,11 @@ final demoStoreProvider = Provider<DemoStore>((ref) {
 
 final materialRepositoryProvider = Provider<MaterialRepository>((ref) {
   if (ref.watch(appConfigProvider).useDemoData) {
-    return DemoMaterialRepository(store: ref.watch(demoStoreProvider));
+    // A buyer demo account sees only published batches in the public view.
+    final isSupplier = ref.watch(
+        sessionProvider.select((s) => s.user?.role == UserRole.enterprise));
+    return DemoMaterialRepository(
+        store: ref.watch(demoStoreProvider), publicView: !isSupplier);
   }
   return ApiMaterialRepository(ref.watch(apiClientProvider));
 });
@@ -60,6 +67,7 @@ class CatalogState {
   const CatalogState({
     this.items = const [],
     this.status,
+    this.filter = const CatalogFilter(),
     this.page = 0,
     this.total = 0,
     this.loading = true,
@@ -70,6 +78,9 @@ class CatalogState {
 
   final List<MaterialItem> items;
   final MaterialStatus? status;
+
+  /// Buyer search and filters; always empty for the supplier's own list.
+  final CatalogFilter filter;
   final int page;
   final int total;
   final bool loading;
@@ -91,15 +102,16 @@ class CatalogController extends AutoDisposeNotifier<CatalogState> {
 
   Future<void> reload({MaterialStatus? status, bool keepStatus = true}) async {
     final filter = keepStatus ? (status ?? state.status) : status;
+    final query = state.filter;
     final gen = ++_generation;
-    state = CatalogState(status: filter);
+    state = CatalogState(status: filter, filter: query);
     try {
-      final page = await ref
-          .read(materialRepositoryProvider)
-          .list(status: filter, page: 1, pageSize: catalogPageSize);
+      final page = await ref.read(materialRepositoryProvider).list(
+          status: filter, page: 1, pageSize: catalogPageSize, filter: query);
       if (gen != _generation) return;
       state = CatalogState(
         status: filter,
+        filter: query,
         items: page.items,
         page: page.page,
         total: page.total,
@@ -107,12 +119,19 @@ class CatalogController extends AutoDisposeNotifier<CatalogState> {
       );
     } catch (e) {
       if (gen != _generation) return;
-      state = CatalogState(status: filter, loading: false, error: _asApi(e));
+      state = CatalogState(
+          status: filter, filter: query, loading: false, error: _asApi(e));
     }
   }
 
   Future<void> setStatus(MaterialStatus? status) =>
       reload(status: status, keepStatus: false);
+
+  /// Applies a new buyer search; the server returns the matching page.
+  Future<void> setFilter(CatalogFilter filter) {
+    state = CatalogState(status: state.status, filter: filter);
+    return reload();
+  }
 
   Future<void> loadMore() async {
     final s = state;
@@ -120,6 +139,7 @@ class CatalogController extends AutoDisposeNotifier<CatalogState> {
     final gen = _generation;
     state = CatalogState(
       status: s.status,
+      filter: s.filter,
       items: s.items,
       page: s.page,
       total: s.total,
@@ -127,12 +147,15 @@ class CatalogController extends AutoDisposeNotifier<CatalogState> {
       loadingMore: true,
     );
     try {
-      final next = await ref
-          .read(materialRepositoryProvider)
-          .list(status: s.status, page: s.page + 1, pageSize: catalogPageSize);
+      final next = await ref.read(materialRepositoryProvider).list(
+          status: s.status,
+          page: s.page + 1,
+          pageSize: catalogPageSize,
+          filter: s.filter);
       if (gen != _generation) return;
       state = CatalogState(
         status: s.status,
+        filter: s.filter,
         items: [...s.items, ...next.items],
         page: next.page,
         total: next.total,
@@ -142,6 +165,7 @@ class CatalogController extends AutoDisposeNotifier<CatalogState> {
       if (gen != _generation) return;
       state = CatalogState(
         status: s.status,
+        filter: s.filter,
         items: s.items,
         page: s.page,
         total: s.total,

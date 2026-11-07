@@ -218,11 +218,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(
           find.textContaining('Демо: подтверждение недоступно'), findsNothing);
+      // A result screen follows the confirmation; go back to the batch.
+      expect(find.text('Характеристики подтверждены'), findsOneWidget);
+      await tester.tap(find.text('К партии'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Подтверждено человеком'), findsOneWidget);
 
       await tester.tap(find.text('Опубликовать'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Партия опубликована'), findsOneWidget);
+      await tester.tap(find.text('К партии'));
       await tester.pumpAndSettle();
       expect(find.text('Доступно'), findsWidgets);
       expect((await repo.get(m.id)).status, MaterialStatus.available);

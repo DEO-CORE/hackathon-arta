@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from tests.integration.conftest import published_material
+from tests.integration.conftest import login_headers, published_material, register
 
 
 def requirement(client, buyer, **over):
@@ -31,6 +31,11 @@ def reserve(client, buyer, material, req=None, quantity="50.000", key=None):
         ),
         headers=buyer["headers"] | {"Idempotency-Key": key or str(uuid4())},
     )
+
+
+def other_buyer(client):
+    acc = register(client, "buyer", activity_type="workshop")
+    return {**acc, "headers": login_headers(client, acc["email"])}
 
 
 def action(client, who, reservation, name, **over):
@@ -103,8 +108,9 @@ def test_idempotency_and_cancel(client, seller, buyer):
         "/buyer-requirements/" + req["id"], json={"max_kg": "10.000"}, headers=buyer["headers"]
     )
     assert response.status_code == 409
-    assert action(client, buyer, r, "cancel").status_code == 200
-    assert action(client, buyer, r, "cancel").status_code == 200
+    assert action(client, buyer, r, "cancel").status_code == 409  # held stock: seller releases
+    assert action(client, seller, r, "cancel", reason="Нет связи").status_code == 200
+    assert action(client, seller, r, "cancel", reason="Нет связи").status_code == 200
     assert (
         client.get("/materials/" + m["id"], headers=seller["headers"]).json()["balance"][
             "available_kg"
@@ -120,7 +126,7 @@ def test_idempotency_and_cancel(client, seller, buyer):
 def test_concurrent_reservations_cannot_oversell(client, seller, buyer):
     m = published_material(client, seller["headers"])
     a = reserve(client, buyer, m, quantity="80.000").json()
-    b = reserve(client, buyer, m, quantity="80.000").json()
+    b = reserve(client, other_buyer(client), m, quantity="80.000").json()
 
     barrier = Barrier(2)
 
@@ -227,13 +233,13 @@ def test_concurrent_reuse_cannot_exceed_transfer(client, seller, buyer):
 def test_business_conflict_replayed_after_stock_changes(client, seller, buyer):
     m = published_material(client, seller["headers"])
     first = reserve(client, buyer, m, quantity="80.000").json()
-    second = reserve(client, buyer, m, quantity="80.000").json()
+    second = reserve(client, other_buyer(client), m, quantity="80.000").json()
     assert action(client, seller, first, "confirm").status_code == 200
     headers = seller["headers"] | {"Idempotency-Key": str(uuid4())}
     url = "/reservations/" + second["id"]
     failure = client.patch(url, json={"action": "confirm"}, headers=headers)
     assert failure.status_code == 409
-    assert action(client, buyer, first, "cancel").status_code == 200
+    assert action(client, seller, first, "cancel", reason="Отказ").status_code == 200
     replay = client.patch(url, json={"action": "confirm"}, headers=headers)
     assert replay.status_code == 409 and replay.json() == failure.json()
     assert replay.headers["Idempotent-Replay"] == "true"

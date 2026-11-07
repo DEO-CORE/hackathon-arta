@@ -13,6 +13,9 @@ os.environ["JWT_SECRET"] = TEST_JWT_SECRET
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://invalid@127.0.0.1:1/unset_test"
 )
+os.environ["EMAIL_CODE_HMAC_KEY"] = (
+    "test-only-hmac-key-test-only-hmac-key-0123"  # not a real secret
+)
 os.environ.setdefault("STORAGE_LOCAL_DIR", tempfile.mkdtemp(prefix="arta-test-storage-"))
 for _k in (
     "RATE_LIMIT_LOGIN_PER_EMAIL",

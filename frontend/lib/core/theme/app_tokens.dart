@@ -38,6 +38,12 @@ abstract final class AppColors {
   static const navSurface = Color(0xF0FFFFFF);
   static const overlaySurface = Color(0xEBFFFFFF);
   static const hatch = Color(0x66737B88);
+  static const navDark = Color(0xFF1C1F24);
+  static const navDarkTile = Color(0xFF2B2F36);
+  static const onNavDark = Color(0xFFE8EAED);
+
+  /// Peach top wash of the auth screens.
+  static const authWash = Color(0xFFFBD9BF);
 }
 
 abstract final class AppSpacing {

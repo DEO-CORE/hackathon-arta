@@ -156,6 +156,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(repo.publishCalls, 1);
       expect(repo.lastVersion, 3);
+      // The result screen shows the server's status and mass, then closes.
+      expect(find.text('Партия опубликована'), findsOneWidget);
+      expect(find.text(MaterialStatus.available.label), findsWidgets);
+      await tester.tap(find.text('К партии'));
+      await tester.pumpAndSettle();
+      expect(find.text('Партия опубликована'), findsNothing);
       expect(find.text(MaterialStatus.available.label), findsWidgets);
       expect(find.text('Архивировать'), findsOneWidget);
     });

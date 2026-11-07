@@ -4,22 +4,30 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
-from pydantic import StrictBool
+from pydantic import Field, StrictBool
 from sqlalchemy import func, or_, select
 
-from app.api.deps import DbSession, require_roles
-from app.core.errors import AppError, not_found
-from app.models import Material, Organization, User
+from app.api.deps import DbSession, PlatformAdminUser
+from app.core.errors import AppError, not_found, validation_error
+from app.models import (
+    AuditLog,
+    Material,
+    Organization,
+    OrganizationMembership,
+    PlatformAdmin,
+    User,
+)
 from app.models.commerce import BuyerRequirement, Reservation, Transaction
-from app.models.enums import Role
+from app.models.enums import MembershipStatus, OrganizationKind, OrgRole, Role
 from app.models.planning import Analysis, OptimizationRun
 from app.schemas.auth import UserOut
 from app.schemas.types import StrictIn
+from app.services import audit
 
 router = APIRouter(tags=["Admin"])
-AdminUser = Annotated[User, Depends(require_roles(Role.admin))]
+AdminUser = PlatformAdminUser
 ROOT = Path(__file__).resolve().parents[1] / "admin_ui"
 HEADERS = {
     "Cache-Control": "no-store",
@@ -253,10 +261,18 @@ def access(id: UUID, data: AccessPatch, user: AdminUser, db: DbSession):
     target = db.scalar(select(User).where(User.id == id).with_for_update())
     if target is None:
         raise not_found()
-    if target.role == Role.admin:
+    if target.role == Role.admin or db.get(PlatformAdmin, target.id) is not None:
         raise AppError(409, "PRECONDITION_FAILED", details={"reason": "ADMIN_ACCOUNT_PROTECTED"})
     previous = target.active
     target.active = data.active
+    audit.record(
+        db,
+        "user.access_changed",
+        actor_user_id=user.id,
+        target_type="user",
+        target_id=target.id,
+        details={"active_before": previous, "active_after": data.active},
+    )
     db.commit()
     logging.getLogger("arta.admin.audit").info(
         "actor=%s target=%s active_before=%s active_after=%s",
@@ -266,3 +282,127 @@ def access(id: UUID, data: AccessPatch, user: AdminUser, db: DbSession):
         data.active,
     )
     return target
+
+
+# ---------- legacy organization review (R1, docs/api.md 20.12) ----------
+
+
+class ActivateIn(StrictIn):
+    kind: OrganizationKind
+    role: OrgRole
+
+
+class RejectIn(StrictIn):
+    reason: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+
+def _pending_membership(db, raw_id: UUID) -> OrganizationMembership:
+    m = db.scalar(
+        select(OrganizationMembership).where(OrganizationMembership.id == raw_id).with_for_update()
+    )
+    if m is None:
+        raise not_found()
+    if m.status != MembershipStatus.pending_review:
+        raise AppError(409, "INVALID_TRANSITION", details={"current_status": m.status.value})
+    return m
+
+
+@router.get("/admin/api/reviews")
+def reviews(
+    user: AdminUser,
+    db: DbSession,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    stmt = (
+        select(OrganizationMembership, Organization, User)
+        .join(Organization, Organization.id == OrganizationMembership.organization_id)
+        .join(User, User.id == OrganizationMembership.user_id)
+        .where(OrganizationMembership.status == MembershipStatus.pending_review)
+    )
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = db.execute(
+        stmt.order_by(OrganizationMembership.created_at, OrganizationMembership.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    reasons = {
+        a.organization_id: (a.details or {}).get("reason")
+        for a in db.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "backfill.ambiguous",
+                AuditLog.organization_id.in_({o.id for _, o, _ in rows}),
+            )
+        )
+    }
+    items = [
+        dict(
+            membership_id=str(m.id),
+            user_id=str(u.id),
+            user_email=u.email,
+            legacy_role=u.role.value,
+            organization_id=str(o.id),
+            organization_name=o.name,
+            activity_type=o.activity_type.value,
+            kind=o.kind.value if o.kind else None,
+            review_reason=reasons.get(o.id),
+            created_at=m.created_at.isoformat(),
+        )
+        for m, o, u in rows
+    ]
+    return dict(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/admin/api/memberships/{id}/activate")
+def activate_membership(id: UUID, data: ActivateIn, user: AdminUser, db: DbSession):
+    m = _pending_membership(db, id)
+    org = db.scalar(
+        select(Organization).where(Organization.id == m.organization_id).with_for_update()
+    )
+    if org.kind is not None and org.kind != data.kind:
+        raise AppError(
+            409,
+            "PRECONDITION_FAILED",
+            details={"reason": "ORGANIZATION_KIND_MISMATCH", "organization_kind": org.kind.value},
+        )
+    if org.activity_type.value == "recycler" and data.kind != OrganizationKind.buyer:
+        raise validation_error(
+            "kind", "invalid_value", "Переработчик может быть только покупателем."
+        )
+    org.kind = data.kind
+    m.status = MembershipStatus.active
+    m.role = data.role
+    audit.record(
+        db,
+        "membership.activated",
+        actor_user_id=user.id,
+        organization_id=org.id,
+        target_type="membership",
+        target_id=m.id,
+        details={"user_id": str(m.user_id), "kind": data.kind.value, "role": data.role.value},
+    )
+    db.commit()
+    return dict(
+        membership_id=str(m.id),
+        status=m.status.value,
+        role=m.role.value,
+        organization_id=str(org.id),
+        kind=org.kind.value,
+    )
+
+
+@router.post("/admin/api/memberships/{id}/reject")
+def reject_membership(id: UUID, data: RejectIn, user: AdminUser, db: DbSession):
+    m = _pending_membership(db, id)
+    m.status = MembershipStatus.removed
+    audit.record(
+        db,
+        "membership.rejected",
+        actor_user_id=user.id,
+        organization_id=m.organization_id,
+        target_type="membership",
+        target_id=m.id,
+        details={"user_id": str(m.user_id), "reason": data.reason},
+    )
+    db.commit()
+    return dict(membership_id=str(m.id), status=m.status.value)

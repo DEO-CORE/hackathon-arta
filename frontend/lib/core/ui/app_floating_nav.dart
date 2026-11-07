@@ -16,7 +16,9 @@ class AppNavItem {
   final String route;
 }
 
-/// Floating pill nav for phones: icon above a visible label on every item.
+/// Floating dark pill for phones. Every item is a round icon tile; only the
+/// active one is a white tile with a visible label. Inactive items expose their
+/// label to screen readers and as a hover tooltip instead.
 class AppFloatingNav extends StatelessWidget {
   const AppFloatingNav({
     super.key,
@@ -25,17 +27,11 @@ class AppFloatingNav extends StatelessWidget {
     required this.onSelected,
   });
 
-  /// Pill height (items are 56 dp high).
-  static const double height = 72;
+  /// Tiles are 48 dp round, the pill adds 8 dp on each side. Single-line label
+  /// at any text scale (it ellipsizes), so the height does not depend on it.
+  static const double height = 64;
 
-  /// Pill height at a text scale: labels wrap to two lines above ~140%, so a
-  /// fixed 72 would let the nav cover the end of a scrolled list.
-  static double heightFor(TextScaler scaler) {
-    final label = scaler.scale(16); // caption line height is 16
-    final lines = scaler.scale(10) > 14 ? 2 : 1;
-    final tile = 4 + 24 + lines * label + 4;
-    return (tile < 56 ? 56 : tile) + AppSpacing.sm * 2;
-  }
+  static double heightFor(TextScaler scaler) => height;
 
   final List<AppNavItem> items;
   final int currentIndex;
@@ -45,25 +41,95 @@ class AppFloatingNav extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
-          color: AppColors.navSurface,
+          color: AppColors.navDark,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: AppColors.border),
           boxShadow: AppElevation.level2,
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            for (var i = 0; i < items.length; i++)
-              Expanded(
-                child: _NavTile(
-                  item: items[i],
-                  selected: i == currentIndex,
-                  onTap: () => onSelected(i),
-                  vertical: true,
-                ),
-              ),
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const SizedBox(width: AppSpacing.sm),
+              i == currentIndex
+                  ? Flexible(
+                      child: _PillTile(
+                        item: items[i],
+                        selected: true,
+                        onTap: () => onSelected(i),
+                      ),
+                    )
+                  : _PillTile(
+                      item: items[i],
+                      selected: false,
+                      onTap: () => onSelected(i),
+                    ),
+            ],
           ],
         ),
       );
+}
+
+class _PillTile extends StatelessWidget {
+  const _PillTile({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppNavItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = Material(
+      color: selected ? AppColors.surface : AppColors.navDarkTile,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+              minWidth: AppSpacing.touch, minHeight: AppSpacing.touch),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: selected ? AppSpacing.lg : AppSpacing.md),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(selected ? item.selectedIcon : item.icon,
+                    color: selected ? AppColors.navDark : AppColors.onNavDark),
+                if (selected) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.label
+                          .copyWith(color: AppColors.navDark),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      hint: selected ? 'выбрано' : null,
+      excludeSemantics: true,
+      child: selected
+          ? tile
+          : Tooltip(
+              message: item.label, excludeFromSemantics: true, child: tile),
+    );
+  }
 }
 
 /// Left rail for laptop widths: same items, same active tile.

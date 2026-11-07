@@ -73,7 +73,8 @@ void main() {
   });
 
   group('AppFloatingNav and AppShell', () {
-    testWidgets('three items with visible labels, selected is announced',
+    testWidgets(
+        'only the active item shows a label; the others keep a semantic label',
         (tester) async {
       var picked = -1;
       await _pump(
@@ -83,12 +84,13 @@ void main() {
         scale: 2,
       );
       expect(tester.takeException(), isNull);
+      expect(find.text('Партии'), findsOneWidget);
+      expect(find.text('Главная'), findsNothing);
+      expect(find.text('Организация'), findsNothing);
       for (final l in ['Главная', 'Партии', 'Организация']) {
-        expect(find.text(l), findsOneWidget);
+        expect(find.bySemanticsLabel(l), findsOneWidget);
       }
-      final sem = tester.getSemantics(find.text('Партии'));
-      expect(sem.flagsCollection.isSelected, isNotNull);
-      await tester.tap(find.text('Организация'));
+      await tester.tap(find.bySemanticsLabel('Организация'));
       expect(picked, 2);
     });
 

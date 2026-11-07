@@ -7,7 +7,9 @@ import '../../../core/theme/app_tokens.dart';
 import '../../../core/ui/ui.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/session/org_context.dart';
 import '../../../core/session/session.dart';
+import '../../auth/providers/org_context_provider.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../../auth/models/auth_models.dart';
 import '../../materials/models/material_enums.dart';
@@ -52,7 +54,8 @@ class AnalysisScreen extends ConsumerWidget {
         data: (m) {
           final isOwner =
               ref.watch(sessionProvider).user?.role == UserRole.enterprise &&
-                  m.isOwnerView;
+                  m.isOwnerView &&
+                  ref.watch(canProvider(Perm.materialsAnalyze));
           if (!isOwner) {
             return const Padding(
               padding: EdgeInsets.all(16),

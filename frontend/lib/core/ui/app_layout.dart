@@ -58,19 +58,45 @@ class AppBottomBar extends StatelessWidget {
 
 /// Text wordmark: no logo file exists, so none is invented.
 class AppBrandBlock extends StatelessWidget {
-  const AppBrandBlock({super.key});
+  const AppBrandBlock({super.key, this.centered = false, this.tagline = true});
+
+  final bool centered;
+  final bool tagline;
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         children: [
           Text('ARTA',
               style: AppTypography.display.copyWith(
                   fontSize: 28, height: 36 / 28, fontWeight: FontWeight.w700)),
-          Text(
-              'Платформа учёта и повторного использования текстильных остатков',
-              style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textSecondary)),
+          if (tagline)
+            Text(
+                'Платформа учёта и повторного использования текстильных остатков',
+                textAlign: centered ? TextAlign.center : TextAlign.start,
+                style: AppTypography.bodySmall
+                    .copyWith(color: AppColors.textSecondary)),
         ],
+      );
+}
+
+/// Soft peach wash at the top of the auth screens fading into the page colour.
+class AppAuthBackground extends StatelessWidget {
+  const AppAuthBackground({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.authWash, AppColors.background],
+            stops: [0, 0.45],
+          ),
+        ),
+        child: child,
       );
 }

@@ -1,16 +1,18 @@
 from fastapi import APIRouter
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import DbSession, PrincipalDep, perm
 from app.core.errors import AppError, not_found
 from app.models import Organization
 from app.models.enums import ActivityType, Role
 from app.schemas.organization import OrganizationOut, OrganizationPatchIn, organization_out
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
+OrgReader = PrincipalDep  # pending_review members may read their organization
+OrgEditor = perm("org.update")
 
 
 @router.get("/me", response_model=OrganizationOut)
-def get_my_organization(user: CurrentUser, db: DbSession) -> OrganizationOut:
+def get_my_organization(user: OrgReader, db: DbSession) -> OrganizationOut:
     org = db.get(Organization, user.organization_id)
     if org is None:
         raise not_found()
@@ -19,7 +21,7 @@ def get_my_organization(user: CurrentUser, db: DbSession) -> OrganizationOut:
 
 @router.patch("/me", response_model=OrganizationOut)
 def patch_my_organization(
-    data: OrganizationPatchIn, user: CurrentUser, db: DbSession
+    data: OrganizationPatchIn, user: OrgEditor, db: DbSession
 ) -> OrganizationOut:
     org = db.get(Organization, user.organization_id)
     if org is None:

@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -5,9 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models import Organization, User
-from app.models.enums import Role
+from app.models import Organization, OrganizationMembership, User
+from app.models.enums import MembershipStatus, OrganizationKind, OrgRole, Role
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UserOut
+from app.services import audit
+from app.services.email_confirmation import DEMO_AUTO_CONFIRM_EMAIL
 
 
 def register(db: Session, data: RegisterIn) -> tuple[User, Organization]:
@@ -17,6 +21,9 @@ def register(db: Session, data: RegisterIn) -> tuple[User, Organization]:
         raise AppError(409, "EMAIL_ALREADY_REGISTERED")
     contacts = data.organization.contacts
     org = Organization(
+        kind=OrganizationKind.supplier
+        if data.role.value == "enterprise"
+        else OrganizationKind.buyer,
         name=data.organization.name,
         city=data.organization.city,
         activity_type=data.organization.activity_type,
@@ -48,6 +55,36 @@ def register(db: Session, data: RegisterIn) -> tuple[User, Organization]:
         active=True,
     )
     db.add(user)
+    db.flush()
+    user.default_organization_id = org.id
+    # Registration creates the organization, so the registrant is its OWNER.
+    membership = OrganizationMembership(
+        user_id=user.id,
+        organization_id=org.id,
+        role=OrgRole.OWNER,
+        status=MembershipStatus.active,
+        created_by=user.id,
+    )
+    db.add(membership)
+    db.flush()
+    audit.record(
+        db,
+        "organization.created",
+        actor_user_id=user.id,
+        organization_id=org.id,
+        target_type="organization",
+        target_id=org.id,
+        details={"kind": org.kind.value},
+    )
+    audit.record(
+        db,
+        "membership.created",
+        actor_user_id=user.id,
+        organization_id=org.id,
+        target_type="membership",
+        target_id=membership.id,
+        details={"role": "OWNER"},
+    )
     try:
         db.commit()
     except IntegrityError:
@@ -65,5 +102,13 @@ def login(db: Session, data: LoginIn, settings: Settings) -> TokenOut:
         raise AppError(401, "INVALID_CREDENTIALS")
     if not user.active:
         raise AppError(403, "ACCOUNT_DISABLED")
+    if not user.email_confirmed:
+        if settings.demo_mode and user.email == DEMO_AUTO_CONFIRM_EMAIL:
+            # Demo-only exception (A23-12): the demo seller needs no code.
+            user.email_confirmed = True
+            user.email_confirmed_at = datetime.now(UTC)
+            db.commit()
+        else:
+            raise AppError(403, "EMAIL_NOT_CONFIRMED")
     token, expires_in = create_access_token(user.id, settings)
     return TokenOut(access_token=token, expires_in=expires_in, user=UserOut.model_validate(user))

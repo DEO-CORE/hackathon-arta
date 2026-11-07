@@ -4,10 +4,20 @@ import '../theme/app_tokens.dart';
 
 /// Label left, value right-aligned, hairline below. Wraps instead of clipping.
 class AppKeyValueRow extends StatelessWidget {
-  const AppKeyValueRow({super.key, required this.label, required this.value});
+  const AppKeyValueRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueWidget,
+  });
 
   final String label;
+
+  /// Text used for semantics and, without [valueWidget], for display.
   final String value;
+
+  /// Optional replacement for the value text, for example a status badge.
+  final Widget? valueWidget;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -32,8 +42,11 @@ class AppKeyValueRow extends StatelessWidget {
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   flex: 3,
-                  child: Text(value,
-                      textAlign: TextAlign.end, style: AppTypography.body),
+                  child: valueWidget != null
+                      ? Align(
+                          alignment: Alignment.centerRight, child: valueWidget)
+                      : Text(value,
+                          textAlign: TextAlign.end, style: AppTypography.body),
                 ),
               ],
             ),

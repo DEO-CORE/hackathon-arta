@@ -23,25 +23,57 @@ def _test_url() -> str:
     return url
 
 
+# Arbitrary constant: one suite at a time per database. Two suites sharing a database
+# truncate and migrate each other's data, which produced 9-10 failures and 30+ errors.
+_SUITE_LOCK_KEY = 728311004
+
+
+# Process-wide handle to the held lock. tests/security/conftest.py re-exports this fixture,
+# so pytest instantiates it twice in one process; the second instance must not wait on a
+# lock its own process already holds (that deadlocks the run).
+_held_lock: dict = {}
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _migrated_db() -> Iterator[None]:
-    _test_url()  # validates the target database name
+    url = _test_url()  # validates the target database name
     get_settings.cache_clear()
-    reset_engine()
-    cfg = Config("alembic.ini")
-    command.downgrade(cfg, "base")
-    command.upgrade(cfg, "head")
-    yield
-    reset_engine()
+    owner = not _held_lock
+    if owner:
+        lock_engine = create_engine(url)
+        # A session-level advisory lock is released by the server if the process dies,
+        # so a crashed run cannot leave the database locked.
+        lock_conn = lock_engine.connect()
+        lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _SUITE_LOCK_KEY})
+        lock_conn.commit()
+        _held_lock.update(engine=lock_engine, conn=lock_conn)
+    try:
+        reset_engine()
+        cfg = Config("alembic.ini")
+        command.downgrade(cfg, "base")
+        command.upgrade(cfg, "head")
+        yield
+        reset_engine()
+    finally:
+        if owner:
+            lock_conn = _held_lock.pop("conn")
+            lock_engine = _held_lock.pop("engine")
+            lock_conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _SUITE_LOCK_KEY})
+            lock_conn.commit()
+            lock_conn.close()
+            lock_engine.dispose()
 
 
 @pytest.fixture(autouse=True)
 def _clean_tables() -> Iterator[None]:
     engine = create_engine(_test_url())
     with engine.begin() as conn:
+        # audit_log has no FK to the truncated tables, so it must be listed explicitly;
+        # otherwise queries like "first user.access_changed row" read earlier tests' rows.
         conn.execute(
             text(
-                "TRUNCATE material_images, materials, users, organizations RESTART IDENTITY CASCADE"
+                "TRUNCATE audit_log, material_images, materials, users, organizations "
+                "RESTART IDENTITY CASCADE"
             )
         )
     engine.dispose()
@@ -65,7 +97,22 @@ def client(make_app) -> Iterator[TestClient]:
         yield c
 
 
-def register(client: TestClient, role: str, email: str | None = None, **org) -> dict:
+def confirm_email_in_db(email: str) -> None:
+    """Shortcut for tests that are not about email confirmation (login is gated, api.md 23)."""
+    engine = create_engine(_test_url())
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE users SET email_confirmed = true, email_confirmed_at = now() WHERE email = :e"
+            ),
+            {"e": email.lower()},
+        )
+    engine.dispose()
+
+
+def register(
+    client: TestClient, role: str, email: str | None = None, confirm: bool = True, **org
+) -> dict:
     email = email or f"{role}-{uuid.uuid4().hex[:8]}@example.test"
     body = {
         "email": email,
@@ -79,6 +126,8 @@ def register(client: TestClient, role: str, email: str | None = None, **org) -> 
     }
     r = client.post("/auth/register", json=body)
     assert r.status_code == 201, r.text
+    if confirm:
+        confirm_email_in_db(email)
     return {"email": email, "password": body["password"], **r.json()}
 
 

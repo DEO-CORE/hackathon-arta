@@ -25,10 +25,11 @@ void main() {
     await _app(tester, RecordingRepo());
     expect(find.byType(AppFloatingNav), findsOneWidget);
     expect(find.byType(AppNavRail), findsNothing);
-    await tester.tap(find.text('Организация').last);
+    await tester.tap(find.bySemanticsLabel('Организация'));
     await tester.pumpAndSettle();
     expect(find.byType(AppFloatingNav), findsOneWidget);
-    expect(find.text('Главная'), findsOneWidget);
+    expect(find.text('Организация'), findsWidgets); // active label
+    expect(find.bySemanticsLabel('Главная'), findsOneWidget);
   });
 
   testWidgets('laptop: rail instead of the pill', (tester) async {
@@ -40,7 +41,7 @@ void main() {
   testWidgets('catalog keeps a back arrow after switching tabs with the nav',
       (tester) async {
     await _app(tester, RecordingRepo());
-    await tester.tap(find.text('Партии').last); // nav tile uses go()
+    await tester.tap(find.bySemanticsLabel('Партии')); // nav tile uses go()
     await tester.pumpAndSettle();
     expect(find.text('Мои партии'), findsOneWidget);
     expect(find.byTooltip('Назад'), findsOneWidget);
@@ -66,7 +67,7 @@ void main() {
       ]
       ..total = 3;
     await _app(tester, repo, scale: 2);
-    await tester.tap(find.text('Партии').last);
+    await tester.tap(find.bySemanticsLabel('Партии'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Частично распределено'), findsWidgets);

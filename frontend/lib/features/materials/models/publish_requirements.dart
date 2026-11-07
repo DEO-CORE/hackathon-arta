@@ -38,3 +38,16 @@ List<String> missingFromError(ApiException e) {
   final raw = e.details?['missing'];
   return raw is List ? raw.whereType<String>().toList() : const [];
 }
+
+const _publishShort = <String, String>{
+  'material_type': 'тип',
+  'total_kg': 'масса',
+  'condition': 'состояние',
+  'city': 'город',
+  'images': 'фото',
+  'confirmation': 'подтверждение',
+};
+
+/// Short lower-case names for a one-line "what is left" summary.
+List<String> publishMissingShort(Iterable<String> fields) =>
+    [for (final f in fields) _publishShort[f] ?? 'требование'];

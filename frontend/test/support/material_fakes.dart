@@ -1,3 +1,5 @@
+import 'package:arta/core/session/org_context.dart';
+import 'package:arta/features/auth/providers/org_context_provider.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -5,6 +7,7 @@ import 'package:arta/core/network/api_exception.dart';
 import 'package:arta/core/session/session.dart';
 import 'package:arta/features/auth/models/auth_models.dart';
 import 'package:arta/features/materials/data/material_repository.dart';
+import 'package:arta/features/materials/models/catalog_filter.dart';
 import 'package:arta/features/materials/models/material_enums.dart';
 import 'package:arta/features/materials/models/material_input.dart';
 import 'package:arta/features/materials/models/material_models.dart';
@@ -60,6 +63,7 @@ class RecordingRepo implements MaterialRepository {
   int uploadCalls = 0;
   int patchCalls = 0;
   MaterialStatus? lastStatus;
+  CatalogFilter lastFilter = const CatalogFilter();
   final statusHistory = <MaterialStatus?>[];
   MaterialCreate? lastCreate;
   MaterialPatch? lastPatch;
@@ -69,8 +73,12 @@ class RecordingRepo implements MaterialRepository {
 
   @override
   Future<MaterialListPage> list(
-      {MaterialStatus? status, int page = 1, int pageSize = 20}) async {
+      {MaterialStatus? status,
+      int page = 1,
+      int pageSize = 20,
+      CatalogFilter filter = const CatalogFilter()}) async {
     listCalls++;
+    lastFilter = filter;
     lastStatus = status;
     statusHistory.add(status);
     if (listGate != null) return listGate!.future;
@@ -149,10 +157,18 @@ class StubPicker implements PhotoPicker {
   Future<List<PickedPhoto>> pick() async => photos;
 }
 
+/// Test stand-in for GET /auth/me: derives the context from the session user,
+/// so widget tests never reach the network for it.
+class FixtureOrgContextSource implements OrgContextSource {
+  @override
+  Future<OrgContext> load(AuthUser user) async => OrgContext.fromUser(user);
+}
+
 ProviderContainer makeContainer(RecordingRepo repo,
     {PhotoPicker? picker, UserRole role = UserRole.enterprise}) {
   final container = ProviderContainer(overrides: [
     materialRepositoryProvider.overrideWithValue(repo),
+    orgContextSourceProvider.overrideWithValue(FixtureOrgContextSource()),
     photoPickerProvider.overrideWithValue(
         picker ?? StubPicker([PickedPhoto(name: 'a.jpg', bytes: jpegBytes())])),
   ]);

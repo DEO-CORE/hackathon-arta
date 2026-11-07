@@ -22,7 +22,12 @@ void main() {
   testWidgets('DEV-01: a field error clears as soon as the value is fixed',
       (tester) async {
     await _pumpLogin(tester, demo: false);
-    await tester.tap(find.text('Войти'));
+    // Submit is disabled while the form is empty, so errors appear when the
+    // user touches and clears the fields.
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'a');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), '');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Пароль'), 'a');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Пароль'), '');
     await tester.pump();
     expect(find.text('Укажите email.'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'abc');
@@ -35,7 +40,7 @@ void main() {
     await tester.pump();
     expect(
         find.text('Введите email в формате name@example.com.'), findsNothing);
-    // The untouched password field keeps its error until the user edits it.
+    // The password field keeps its error until the user edits it.
     expect(find.text('Укажите пароль.'), findsOneWidget);
   });
 

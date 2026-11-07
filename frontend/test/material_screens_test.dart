@@ -1,3 +1,4 @@
+import 'package:arta/features/auth/providers/org_context_provider.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -5,6 +6,7 @@ import 'package:arta/core/network/api_exception.dart';
 import 'package:arta/core/session/session.dart';
 import 'package:arta/features/auth/models/auth_models.dart';
 import 'package:arta/features/materials/data/material_repository.dart';
+import 'package:arta/features/materials/models/catalog_filter.dart';
 import 'package:arta/features/materials/models/material_enums.dart';
 import 'package:arta/features/materials/models/material_input.dart';
 import 'package:arta/features/materials/models/material_models.dart';
@@ -16,6 +18,7 @@ import 'package:arta/features/materials/providers/material_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/material_fakes.dart';
 
 MaterialItem item(String id, {int version = 1, String name = 'Демо-партия'}) =>
     MaterialItem(
@@ -51,7 +54,10 @@ class FakeRepo implements MaterialRepository {
 
   @override
   Future<MaterialListPage> list(
-      {MaterialStatus? status, int page = 1, int pageSize = 20}) async {
+      {MaterialStatus? status,
+      int page = 1,
+      int pageSize = 20,
+      CatalogFilter filter = const CatalogFilter()}) async {
     listCalls++;
     if (listError != null) throw listError!;
     final start = (page - 1) * pageSize;
@@ -125,6 +131,7 @@ Future<void> pump(WidgetTester tester, FakeRepo repo, Widget home,
     addTearDown(tester.view.reset);
   }
   final container = ProviderContainer(overrides: [
+    orgContextSourceProvider.overrideWithValue(FixtureOrgContextSource()),
     materialRepositoryProvider.overrideWithValue(repo),
     photoPickerProvider.overrideWithValue(FakePicker()),
   ]);

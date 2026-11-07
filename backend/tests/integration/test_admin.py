@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_engine
-from app.models import User
+from app.models import OrganizationMembership, PlatformAdmin, User
 from app.models.enums import Role
 from tests.integration.conftest import login_headers, register
 
@@ -14,6 +14,10 @@ def admin(client):
     with Session(get_engine()) as db:
         user = db.scalar(select(User).where(User.email == account["email"]))
         user.role = Role.admin
+        # Same shape as app.create_admin: platform admin, no organization membership.
+        db.query(OrganizationMembership).filter_by(user_id=user.id).delete()
+        user.default_organization_id = None
+        db.add(PlatformAdmin(user_id=user.id))
         db.commit()
     return {
         "email": account["email"],

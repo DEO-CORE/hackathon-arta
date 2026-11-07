@@ -80,26 +80,26 @@ def test_create_rejects_status_and_unknown_fields(client, seller):
 
 
 def test_buyer_cannot_create_or_mutate(client, buyer, seller):
-    m = new_material(client, seller["headers"])
+    """Hidden (draft) material: 404 first. Visible published material: 403. No resource ID: 403."""
     hb = buyer["headers"]
     assert client.post("/materials", json={"name": "x"}, headers=hb).status_code == 403
-    assert (
-        client.patch(
-            f"/materials/{m['id']}", json={"version": 1, "name": "y"}, headers=hb
-        ).status_code
-        == 403
-    )
-    assert (
-        client.post(f"/materials/{m['id']}/confirm", json={"version": 1}, headers=hb).status_code
-        == 403
-    )
-    for action in ("publish", "archive"):
-        r = client.post(f"/materials/{m['id']}/{action}", json={"version": 1}, headers=hb)
-        assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
-        # same answer for a nonexistent material: existence is not revealed
-        r = client.post(f"/materials/{uuid.uuid4()}/{action}", json={"version": 1}, headers=hb)
-        assert r.status_code == 403
-    assert upload(client, hb, m["id"]).status_code == 403
+    draft = new_material(client, seller["headers"])
+    pub = published_material(client, seller["headers"])
+    calls = [
+        ("patch", "", {"version": 1, "name": "y"}),
+        ("post", "/confirm", {"version": 1}),
+        ("post", "/publish", {"version": 1}),
+        ("post", "/archive", {"version": 1}),
+    ]
+    for method, suffix, body in calls:
+        r = getattr(client, method)(f"/materials/{draft['id']}{suffix}", json=body, headers=hb)
+        assert r.status_code == 404, (method, suffix)
+        r = getattr(client, method)(f"/materials/{pub['id']}{suffix}", json=body, headers=hb)
+        assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN", (method, suffix)
+        r = getattr(client, method)(f"/materials/{uuid.uuid4()}{suffix}", json=body, headers=hb)
+        assert r.status_code == 404, (method, suffix)
+    assert upload(client, hb, draft["id"]).status_code == 404
+    assert upload(client, hb, pub["id"]).status_code == 403
 
 
 def test_unauthenticated_materials_401(client):
@@ -147,7 +147,8 @@ def test_buyer_sees_only_published_public_fields(client, seller, buyer):
     body = r.json()
     for hidden in ("balance", "total_kg", "held_kg", "transferred_kg", "confirmed_by", "contacts"):
         assert hidden not in body
-    assert body["available_kg"] == "120.500" and body["organization_name"] == "Демо организация"
+    assert body["available_kg"] == "120.500"
+    assert "organization_name" not in body  # buyers see city and type only before a request
 
     lst = client.get("/materials", headers=hb).json()
     assert [i["id"] for i in lst["items"]] == [pub["id"]] and lst["total"] == 1

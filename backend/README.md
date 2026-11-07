@@ -208,3 +208,22 @@ python -m ruff format --check .
 проверяют роль на сервере; отключённый пользователь теряет доступ при следующем запросе.
 Токен панели хранится только в памяти страницы: после обновления страницы нужно войти снова.
 Остатки, сделки и прогнозы в панели доступны для просмотра; изменение баланса напрямую запрещено.
+
+## R1 migration (organization kind, memberships, platform admins)
+
+Revisions `0004` (schema) and `0005` (backfill). Procedure used and verified on a copy:
+
+```sh
+createdb -T arta_dev arta_r1_copy          # copy first; never migrate production blind
+DATABASE_URL=postgresql://.../arta_r1_copy python -m alembic upgrade head   # prints the backfill report
+# organizations that need manual review (not touched by the backfill):
+psql arta_r1_copy -c "select organization_id, details from audit_log where action='backfill.ambiguous'"
+python -m alembic downgrade 0003            # rollback: removes only backfill-created rows
+```
+
+`users.role` and `users.organization_id` are kept (compatibility and rollback). Details: `docs/api.md` 20.12.
+
+Revision `0006` gives every user of an ambiguous organization a `pending_review` membership (no rights,
+kind stays NULL). Review queue and activation: `GET /admin/api/reviews`,
+`POST /admin/api/memberships/{id}/activate|reject` (platform admin). Use a dedicated `*_test` database
+per runner: two concurrent pytest runs on one database deadlock in the migration fixtures.

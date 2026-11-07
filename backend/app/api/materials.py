@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 
-from app.api.deps import CatalogUser, DbSession, EnterpriseUser, Limiter, SettingsDep
+from app.api.deps import DbSession, Limiter, SettingsDep, perm
 from app.core.errors import AppError
 from app.integrations.storage import ObjectStorage
 from app.integrations.storage.factory import get_storage
@@ -24,6 +24,13 @@ from app.services.materials import MaterialListQuery
 router = APIRouter(prefix="/materials", tags=["materials"])
 
 Storage = Annotated[ObjectStorage, Depends(get_storage)]
+MID = "material_id"
+CatalogUser = perm("material.read", "catalog.read", any_of=True)
+DraftCreator = perm("material.draft")
+DraftEditor = perm("material.draft", material_param=MID)
+Confirmer = perm("material.confirm", material_param=MID)
+Publisher = perm("material.publish", material_param=MID)
+Archiver = perm("material.archive", material_param=MID)
 
 
 @router.get("", response_model=Page[MaterialOut] | Page[MaterialPublicOut])
@@ -35,7 +42,7 @@ def list_materials(
 
 @router.post("", status_code=201, response_model=MaterialOut)
 def create_material(
-    data: MaterialCreateIn, response: Response, user: EnterpriseUser, db: DbSession
+    data: MaterialCreateIn, response: Response, user: DraftCreator, db: DbSession
 ) -> MaterialOut:
     m = svc.create_material(db, user, data)
     response.headers["Location"] = f"/materials/{m.id}"
@@ -49,14 +56,14 @@ def get_material(material_id: str, user: CatalogUser, db: DbSession):
 
 @router.patch("/{material_id}", response_model=MaterialOut)
 def patch_material(
-    material_id: str, data: MaterialPatchIn, user: EnterpriseUser, db: DbSession
+    material_id: str, data: MaterialPatchIn, user: DraftEditor, db: DbSession
 ) -> MaterialOut:
     return svc.material_out(svc.patch_material(db, user, material_id, data))
 
 
 @router.post("/{material_id}/confirm", response_model=MaterialOut)
 def confirm_material(
-    material_id: str, data: MaterialConfirmIn, user: EnterpriseUser, db: DbSession
+    material_id: str, data: MaterialConfirmIn, user: Confirmer, db: DbSession
 ) -> MaterialOut:
     m = svc.confirm_material(db, user, material_id, data.version, data.analysis_id)
     return svc.material_out(m)
@@ -74,7 +81,7 @@ def _lifecycle_limit(limiter: Limiter, settings: SettingsDep, user_id, action: s
 def publish_material(
     material_id: str,
     data: MaterialVersionIn,
-    user: EnterpriseUser,
+    user: Publisher,
     db: DbSession,
     limiter: Limiter,
     settings: SettingsDep,
@@ -87,7 +94,7 @@ def publish_material(
 def archive_material(
     material_id: str,
     data: MaterialVersionIn,
-    user: EnterpriseUser,
+    user: Archiver,
     db: DbSession,
     limiter: Limiter,
     settings: SettingsDep,
@@ -99,7 +106,7 @@ def archive_material(
 @router.post("/{material_id}/images", status_code=201, response_model=ImageUploadOut)
 def upload_image(
     material_id: str,
-    user: EnterpriseUser,
+    user: DraftEditor,
     db: DbSession,
     limiter: Limiter,
     settings: SettingsDep,

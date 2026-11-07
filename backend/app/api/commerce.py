@@ -1,10 +1,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Header, Query
 from sqlalchemy import func, select
 
-from app.api.deps import CatalogUser, DbSession, EnterpriseUser, require_roles
+from app.api.deps import DbSession, perm
 from app.models.commerce import BuyerRequirement, Reservation
 from app.models.enums import MaterialType, Role
 from app.schemas.commerce import (
@@ -20,12 +20,19 @@ from app.schemas.commerce import (
     ReservationStatus,
     ReuseConfirmation,
     ReuseConfirmationOut,
+    TransactionViewOut,
 )
 from app.schemas.material import Page
 from app.services import commerce as service
 
 router = APIRouter(tags=["Commerce"])
-BuyerUser = Annotated[object, Depends(require_roles(Role.buyer))]
+ReqReader = perm("requirement.read", "requirement.read_public", any_of=True)
+ReqWriter = perm("requirement.write")
+ResReader = perm("reservation.read")
+ResActor = perm("reservation.read")  # action-level permission is checked after the 404 check
+ResCreator = perm("reservation.create")
+InternalUser = perm("material.internal_use", material_param="id")
+ReuseUser = perm("reuse.confirm")
 Key = Annotated[
     str, Header(alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 ]
@@ -36,7 +43,7 @@ OptionalKey = Annotated[
 
 
 @router.post("/buyer-requirements", status_code=201, response_model=RequirementOut)
-def create_requirement(data: RequirementCreate, user: BuyerUser, db: DbSession):
+def create_requirement(data: RequirementCreate, user: ReqWriter, db: DbSession):
     r = BuyerRequirement(
         **data.model_dump(), organization_id=user.organization_id, remaining_demand_kg=data.max_kg
     )
@@ -46,13 +53,13 @@ def create_requirement(data: RequirementCreate, user: BuyerUser, db: DbSession):
 
 
 @router.patch("/buyer-requirements/{id}", response_model=RequirementOut)
-def patch_requirement(id: str, data: RequirementPatch, user: BuyerUser, db: DbSession):
+def patch_requirement(id: str, data: RequirementPatch, user: ReqWriter, db: DbSession):
     return service.patch_requirement(db, user, id, data)
 
 
 @router.get("/buyer-requirements", response_model=Page[RequirementOut | RequirementPublic])
 def requirements(
-    user: CatalogUser,
+    user: ReqReader,
     db: DbSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -87,7 +94,7 @@ def requirements(
 
 
 @router.post("/reservations", status_code=201, response_model=ReservationOut)
-def create_reservation(data: ReservationCreate, user: BuyerUser, db: DbSession, key: Key):
+def create_reservation(data: ReservationCreate, user: ResCreator, db: DbSession, key: Key):
     return service.idempotent(
         db,
         user,
@@ -101,7 +108,7 @@ def create_reservation(data: ReservationCreate, user: BuyerUser, db: DbSession, 
 
 @router.get("/reservations", response_model=Page[ReservationOut])
 def reservations(
-    user: CatalogUser,
+    user: ResReader,
     db: DbSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -134,7 +141,7 @@ def reservations(
 
 @router.patch("/reservations/{id}", response_model=ReservationOut)
 def action(
-    id: str, data: ReservationAction, user: CatalogUser, db: DbSession, key: OptionalKey = None
+    id: str, data: ReservationAction, user: ResActor, db: DbSession, key: OptionalKey = None
 ):
     return service.idempotent(
         db,
@@ -148,7 +155,7 @@ def action(
 
 
 @router.post("/materials/{id}/internal-use", status_code=201, response_model=InternalUseOut)
-def internal_use(id: str, data: InternalUse, user: EnterpriseUser, db: DbSession, key: Key):
+def internal_use(id: str, data: InternalUse, user: InternalUser, db: DbSession, key: Key):
     return service.idempotent(
         db,
         user,
@@ -163,7 +170,7 @@ def internal_use(id: str, data: InternalUse, user: EnterpriseUser, db: DbSession
 @router.post(
     "/transactions/{id}/reuse-confirmation", status_code=201, response_model=ReuseConfirmationOut
 )
-def reuse(id: str, data: ReuseConfirmation, user: BuyerUser, db: DbSession, key: Key):
+def reuse(id: str, data: ReuseConfirmation, user: ReuseUser, db: DbSession, key: Key):
     return service.idempotent(
         db,
         user,
@@ -173,3 +180,19 @@ def reuse(id: str, data: ReuseConfirmation, user: BuyerUser, db: DbSession, key:
         201,
         lambda: service.confirm_reuse(db, user, id, data),
     )
+
+
+@router.get("/transactions", response_model=Page[TransactionViewOut])
+def transactions(
+    user: ResReader,
+    db: DbSession,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: Annotated[list[ReservationStatus] | None, Query()] = None,
+):
+    return service.list_transactions(db, user, page, page_size, status)
+
+
+@router.get("/transactions/{id}", response_model=TransactionViewOut)
+def transaction(id: str, user: ResReader, db: DbSession):
+    return service.get_transaction(db, user, id)

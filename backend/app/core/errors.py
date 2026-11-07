@@ -22,6 +22,10 @@ _DEFAULT_MESSAGES = {
     "ACTIVE_OBLIGATIONS": "Есть активные обязательства по партии.",
     "IMAGE_LIMIT_REACHED": "Достигнут лимит фото на партии.",
     "PRECONDITION_FAILED": "Не выполнено условие операции.",
+    "EMAIL_NOT_CONFIRMED": "Подтвердите email: введите код из письма.",
+    "INVALID_CODE": "Неверный код.",
+    "CODE_EXPIRED": "Срок действия кода истёк. Запросите новый код.",
+    "EMAIL_DELIVERY_UNAVAILABLE": "Отправка писем сейчас недоступна.",
     "EMAIL_ALREADY_REGISTERED": "Этот email уже зарегистрирован.",
     "VALIDATION_ERROR": "Проверьте заполненные поля.",
     "PUBLISH_REQUIREMENTS_NOT_MET": "Для публикации заполнены не все данные.",
@@ -82,7 +86,10 @@ def validation_error(field: str, code: str, message: str) -> AppError:
     return AppError(
         422,
         "VALIDATION_ERROR",
-        details={"errors": [{"field": field, "code": code, "message": message}]},
+        details={
+            "missing": [field],
+            "errors": [{"field": field, "code": code, "message": message}],
+        },
     )
 
 

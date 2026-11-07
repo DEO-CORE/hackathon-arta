@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import '../core/network/api_exception.dart';
 import '../features/materials/data/material_repository.dart';
+import '../features/materials/models/catalog_filter.dart';
 import '../features/materials/models/material_enums.dart';
 import '../features/materials/models/material_input.dart';
 import '../features/materials/models/material_models.dart';
@@ -35,8 +36,33 @@ String _mimeOf(String ext) => switch (ext) {
 /// Demo repository with the same rules as the API for versions, confirmation,
 /// publish and archive. State survives restarts through [DemoStore].
 class DemoMaterialRepository implements MaterialRepository, DemoResettable {
-  DemoMaterialRepository({DemoStore? store})
+  DemoMaterialRepository({DemoStore? store, this.publicView = false})
       : _store = store ?? MemoryDemoStore();
+
+  /// Buyer accounts: only published batches, without the owner's balance.
+  final bool publicView;
+
+  static bool _published(MaterialItem m) =>
+      m.status == MaterialStatus.available ||
+      m.status == MaterialStatus.partiallyAllocated;
+
+  MaterialItem _viewOf(MaterialItem m) => !publicView
+      ? m
+      : MaterialItem(
+          id: m.id,
+          name: m.name,
+          status: m.status,
+          version: m.version,
+          availableKg: m.availableKg,
+          images: m.images,
+          materialType: m.materialType,
+          composition: m.composition,
+          scrapSize: m.scrapSize,
+          condition: m.condition,
+          pricePerKg: m.pricePerKg,
+          city: m.city,
+          organizationName: 'Демо швейная фабрика',
+        );
 
   final DemoStore _store;
   final List<MaterialItem> _items = [];
@@ -189,10 +215,22 @@ class DemoMaterialRepository implements MaterialRepository, DemoResettable {
     MaterialStatus? status,
     int page = 1,
     int pageSize = 20,
+    CatalogFilter filter = const CatalogFilter(),
   }) =>
       _run(() async {
-        final list =
-            _items.where((m) => status == null || m.status == status).toList();
+        final q = filter.q.trim().toLowerCase();
+        final city = filter.city.trim().toLowerCase();
+        // Demo only: the real server does this filtering.
+        final list = _items
+            .where((m) => !publicView || _published(m))
+            .where((m) => status == null || m.status == status)
+            .where((m) => q.isEmpty || m.name.toLowerCase().contains(q))
+            .where((m) => filter.type == null || m.materialType == filter.type)
+            .where((m) =>
+                filter.condition == null || m.condition == filter.condition)
+            .where((m) => city.isEmpty || (m.city ?? '').toLowerCase() == city)
+            .map(_viewOf)
+            .toList();
         final start = (page - 1) * pageSize;
         final slice = start >= list.length
             ? <MaterialItem>[]
@@ -202,7 +240,11 @@ class DemoMaterialRepository implements MaterialRepository, DemoResettable {
       });
 
   @override
-  Future<MaterialItem> get(String id) => _run(() async => _items[_indexOf(id)]);
+  Future<MaterialItem> get(String id) => _run(() async {
+        final m = _items[_indexOf(id)];
+        if (publicView && !_published(m)) throw _notFound;
+        return _viewOf(m);
+      });
 
   @override
   Future<MaterialItem> create(MaterialCreate input) => _run(() async {

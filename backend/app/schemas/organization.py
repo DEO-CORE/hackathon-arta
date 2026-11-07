@@ -4,7 +4,7 @@ from typing import Self
 from pydantic import model_validator
 from pydantic_core import PydanticCustomError
 
-from app.models.enums import ActivityType
+from app.models.enums import ActivityType, OrganizationKind
 from app.schemas.types import OutModel, StrictIn, UtcDateTime, trimmed
 
 
@@ -45,6 +45,7 @@ class OrganizationOut(OutModel):
     name: str
     city: str
     activity_type: ActivityType
+    kind: OrganizationKind | None = None
     contacts: ContactInfoOut
     created_at: UtcDateTime
 
@@ -55,6 +56,7 @@ def organization_out(org) -> OrganizationOut:
         name=org.name,
         city=org.city,
         activity_type=org.activity_type,
+        kind=org.kind,
         contacts=ContactInfoOut(
             contact_name=org.contact_name,
             contact_phone=org.contact_phone,

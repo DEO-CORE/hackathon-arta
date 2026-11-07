@@ -1,3 +1,4 @@
+import 'package:arta/features/auth/providers/org_context_provider.dart';
 import 'dart:typed_data';
 
 import 'package:arta/core/config/app_config.dart';
@@ -12,6 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/material_fakes.dart';
 
 class _Offline implements HttpClientAdapter {
   int calls = 0;
@@ -57,6 +59,7 @@ void main() {
       (tester) async {
     final offline = _Offline();
     final container = ProviderContainer(overrides: [
+      orgContextSourceProvider.overrideWithValue(FixtureOrgContextSource()),
       appConfigProvider.overrideWithValue(
           const AppConfig(apiBaseUrl: 'http://test', useDemoData: false)),
       apiClientProvider.overrideWithValue(ApiClient(

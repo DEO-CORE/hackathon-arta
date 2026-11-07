@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/tab_shell.dart';
+import '../../../core/session/org_context.dart';
 import '../../../core/session/session.dart';
+import '../../auth/providers/org_context_provider.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
@@ -11,6 +13,8 @@ import '../../auth/models/auth_models.dart';
 import '../models/material_enums.dart';
 import '../models/material_models.dart';
 import '../providers/material_providers.dart';
+import '../models/catalog_filter.dart';
+import 'buyer_catalog_filters.dart';
 import 'material_photo_card.dart';
 
 class CatalogScreen extends ConsumerWidget {
@@ -20,6 +24,7 @@ class CatalogScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isOwner =
         ref.watch(sessionProvider).user?.role == UserRole.enterprise;
+    final canCreate = ref.watch(canProvider(Perm.materialsCreate));
     final s = ref.watch(catalogProvider);
     final ctrl = ref.read(catalogProvider.notifier);
 
@@ -42,8 +47,14 @@ class CatalogScreen extends ConsumerWidget {
     } else if (s.items.isEmpty) {
       body = _Empty(
         isOwner: isOwner,
-        filtered: s.status != null,
-        onReset: () => ctrl.setStatus(null),
+        filtered: s.status != null || !s.filter.isEmpty,
+        onReset: () {
+          if (!s.filter.isEmpty) {
+            ctrl.setFilter(const CatalogFilter());
+          } else {
+            ctrl.setStatus(null);
+          }
+        },
         onCreate: create,
       );
     } else {
@@ -61,7 +72,7 @@ class CatalogScreen extends ConsumerWidget {
         body: Builder(builder: (context) {
           final header = Column(
             children: [
-              if (isOwner)
+              if (isOwner && canCreate)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                       AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
@@ -81,6 +92,7 @@ class CatalogScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+              if (!isOwner) const BuyerCatalogFilters(),
               if (isOwner)
                 _StatusFilter(selected: s.status, onChanged: ctrl.setStatus),
             ],

@@ -6,7 +6,7 @@ import '../core/session/session.dart';
 import '../core/ui/ui.dart';
 import '../features/auth/models/auth_models.dart';
 
-enum AppTab { home, materials, organization }
+enum AppTab { home, materials, reservations, organization }
 
 /// Wraps a tab screen with the floating nav (phone) or rail (wide). It is a
 /// plain widget, not a ShellRoute: routes and the auth guard stay as they are.
@@ -33,6 +33,11 @@ class AppTabShell extends ConsumerWidget {
           icon: Icons.inventory_2_outlined,
           selectedIcon: Icons.inventory_2,
           route: '/materials'),
+      AppNavItem(
+          label: isEnterprise ? 'Сделки' : 'Заявки',
+          icon: Icons.swap_horiz_outlined,
+          selectedIcon: Icons.swap_horiz,
+          route: '/reservations'),
       const AppNavItem(
           label: 'Организация',
           icon: Icons.business_outlined,

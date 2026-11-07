@@ -13,8 +13,11 @@ class ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // 403 also carries the request id so support can find the denied call.
     final showId = error.requestId != null &&
-        (error.statusCode == null || error.statusCode! >= 500);
+        (error.statusCode == null ||
+            error.statusCode! >= 500 ||
+            error.statusCode == 403);
     return Semantics(
       liveRegion: true,
       child: Container(

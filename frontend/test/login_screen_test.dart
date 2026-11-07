@@ -50,9 +50,19 @@ void main() {
     final repo = FakeAuthRepository();
     await pumpLogin(tester, repo);
 
-    await tester.tap(find.text('Войти').last);
+    // The submit button is disabled until the form can be valid.
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(button.onPressed, isNull);
+    await tester.tap(find.text('Войти').last, warnIfMissed: false);
     await tester.pump();
+    expect(repo.loginCalls, 0);
 
+    // Validation messages appear once the user touches and clears a field.
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'a');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), '');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Пароль'), 'a');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Пароль'), '');
+    await tester.pump();
     expect(find.text('Укажите email.'), findsOneWidget);
     expect(find.text('Укажите пароль.'), findsOneWidget);
     expect(repo.loginCalls, 0);
@@ -64,7 +74,8 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'abc');
     await tester.enterText(find.widgetWithText(TextFormField, 'Пароль'), 'x');
-    await tester.tap(find.text('Войти').last);
+    await tester.pump();
+    await tester.tap(find.text('Войти').last, warnIfMissed: false);
     await tester.pump();
 
     expect(
@@ -81,6 +92,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Email'), 'a@b.kg');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Пароль'), 'secret');
+    await tester.pump(); // re-enables the submit button
     await tester.tap(find.text('Войти').last);
     await tester.pump();
 
@@ -123,6 +135,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Email'), 'a@b.kg');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Пароль'), 'secret');
+    await tester.pump(); // re-enables the submit button
     await tester.tap(find.text('Войти').last);
     await tester.pumpAndSettle();
 
@@ -147,6 +160,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Email'), 'a@b.kg');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Пароль'), 'secret');
+    await tester.pump(); // re-enables the submit button
     await tester.tap(find.text('Войти').last);
     await tester.pumpAndSettle();
 

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/session/session.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../demo/demo_auth_repository.dart';
@@ -9,7 +10,9 @@ import '../models/organization.dart';
 
 final organizationRepositoryProvider = Provider<OrganizationRepository>((ref) {
   if (ref.watch(appConfigProvider).useDemoData) {
-    return DemoOrganizationRepository();
+    // Demo fixture of the signed-in demo account (never mixed between roles).
+    return DemoOrganizationRepository(
+        email: ref.watch(sessionProvider.select((s) => s.user?.email)));
   }
   return ApiOrganizationRepository(ref.watch(apiClientProvider));
 });

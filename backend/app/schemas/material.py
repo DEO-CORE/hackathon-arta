@@ -112,9 +112,9 @@ class MaterialOut(OutModel):
 
 
 class MaterialPublicOut(OutModel):
+    # No organization name before a reservation exists: buyers see city and type only.
     id: uuid.UUID
     organization_id: uuid.UUID
-    organization_name: str
     name: str
     material_type: MaterialType | None
     composition: str | None

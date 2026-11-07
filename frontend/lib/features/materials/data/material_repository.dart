@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
+import '../models/catalog_filter.dart';
 import '../models/material_enums.dart';
 import '../models/material_input.dart';
 import '../models/material_models.dart';
@@ -11,6 +12,7 @@ abstract class MaterialRepository {
     MaterialStatus? status,
     int page = 1,
     int pageSize = 20,
+    CatalogFilter filter = const CatalogFilter(),
   });
   Future<MaterialItem> get(String id);
   Future<MaterialItem> create(MaterialCreate input);
@@ -35,6 +37,7 @@ class ApiMaterialRepository implements MaterialRepository {
     MaterialStatus? status,
     int page = 1,
     int pageSize = 20,
+    CatalogFilter filter = const CatalogFilter(),
   }) =>
       apiCall(() async {
         final r = await _client.dio.get<Object>(
@@ -43,6 +46,7 @@ class ApiMaterialRepository implements MaterialRepository {
             'page': page,
             'page_size': pageSize,
             if (status != null) 'status': status.api,
+            ...filter.toQuery(),
           },
         );
         return MaterialListPage.fromJson(r.data);

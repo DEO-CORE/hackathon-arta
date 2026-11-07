@@ -24,16 +24,22 @@
 - Клиент не передаёт `id`, `organization_id`, `created_at`, остатки, статус партии и `version`, выданную сервером, как значения для записи (исключение: `version` в PATCH/confirm как условие, см. раздел 4).
 - OpenAPI (`/openapi.json`) генерируется FastAPI и должен совпадать с этим файлом; расхождение — дефект.
 
-### 1.1 Роли
+### 1.1 Роли, организации и членства
 
-| Роль | Как получить |
-| --- | --- |
-| `enterprise` | `POST /auth/register`, `role = "enterprise"` |
-| `buyer` | `POST /auth/register`, `role = "buyer"`; переработчик — `buyer` с `organization.activity_type = "recycler"` |
-| `admin` | Не назначается через API. Модерационных маршрутов в v1 нет |
+Права определяет **членство пользователя в организации** (раздел 20.12), а не поле `users.role`.
 
-Один пользователь принадлежит одной организации (упрощение MVP).
-Проверка роли, организации и владения выполняется на каждом запросе, включая вложенные ID (`image_id`, `analysis_id`, `requirement_id`, `transaction_id`). Для чужих скрытых объектов возвращается 404, для известного, но запрещённого действия по роли — 403.
+| Понятие | Значения | Откуда |
+| --- | --- | --- |
+| Сторона организации `kind` | `supplier` (продавец), `buyer` (покупатель) | задаётся при регистрации; `POST /auth/register` `role=enterprise` создаёт `supplier`, `role=buyer` - `buyer` |
+| Специализация | `activity_type`; переработчик - организация `buyer` с `activity_type=recycler` | регистрация / `PATCH /organizations/me` |
+| Роль в организации | `OWNER`, `MANAGER`, `MEMBER` | членство; регистрация создаёт `OWNER` |
+| Платформенный admin | запись в `platform_admins`; только `/admin/api/*` | серверная консоль `app.create_admin`; через API не назначается |
+
+`users.role` (`enterprise`/`buyer`/`admin`) сохраняется как поле совместимости в `UserOut` и не является источником прав. Для обратной совместимости DTO `role` в `UserOut`, `cancelled_by_role` и `role_view` аналитики означают сторону организации: `supplier` -> `enterprise`, `buyer` -> `buyer`.
+
+**Переходное упрощение MVP:** у пользователя ровно одно активное членство, переключения организаций нет (схема допускает несколько). Контекст организации читается из БД на каждом запросе; токен не несёт ни роли, ни прав.
+
+Порядок проверок на каждом защищённом маршруте: 401 (токен) -> 403 `NO_ACTIVE_MEMBERSHIP` (нет активного членства) -> 404 (недоступный приватный ресурс: чужой или скрытый) -> 403 `FORBIDDEN` (право роли или стороны организации не даёт операцию на доступном ресурсе) -> 409/422 (состояние и валидация бизнес-правил). Покупатель на маршрутах партии, закрытых его стороне (publish, archive, PATCH и т. п.): если партия ему видна (опубликована, `available_kg > 0`) - 403 `FORBIDDEN`; если не видна или не существует - 404 `NOT_FOUND` раньше всего (решение R1; заменяет единый 403 из 19.1 для несуществующих партий). Маршруты без ID ресурса (`POST /materials`) - 403. Платформенный admin не действует от имени организации: на бизнес-маршрутах организаций ему 403 `NO_ACTIVE_MEMBERSHIP`.
 
 ### 1.2 Единый формат ошибки
 
@@ -214,7 +220,7 @@ Object key в ответ не включается (внутренняя дет�
 
 ### 3.7 `MaterialPublicOut` (для buyer; только опубликованные поля)
 
-`id`, `organization_id`, `organization_name` (string), `name`, `material_type`, `composition` (или null), `scrap_size`, `condition`, `price_per_kg` (или null), `city`, `available_kg` (string), `status`, `images` (MaterialImageOut[], без ссылок), `version`, `created_at`.
+`id`, `organization_id`, `name`, `material_type`, `composition` (или null), `scrap_size`, `condition`, `price_per_kg` (или null), `city`, `available_kg` (string), `status`, `images` (MaterialImageOut[], без ссылок), `version`, `created_at`. `organization_name` покупателю не отдаётся до заявки (решение владельца по умолчанию, см. docs/design/r2-r3-marketplace-workflows.md).
 Не включает: `confirmed_by`, `held_kg`, `transferred_kg`, `internally_used_kg`, `total_kg`, контакты, черновики, AI-предложения.
 
 ### 3.8 `BuyerRequirementOut`
@@ -279,20 +285,24 @@ Object key в ответ не включается (внутренняя дет�
 
 ## 5. Матрица доступа (кратко)
 
-| Маршрут | enterprise | buyer | admin |
+Колонки - сторона организации пользователя (раздел 1.1); внутри стороны права зависят от роли в организации (20.12).
+
+| Маршрут | supplier (enterprise) | buyer | платформенный admin |
 | --- | --- | --- | --- |
 | auth, health | все | все | все |
-| `/organizations/me` | своя | своя | своя |
-| `GET /materials`, `GET /materials/{id}` | свои, любой статус | только опубликованные, `MaterialPublicOut` | не определено |
-| `POST/PATCH /materials*`, images, confirm, internal-use, publish, archive | свои | 403 | не определено |
-| `GET /buyer-requirements` | активные чужие без бюджета и контактов (допущение) | только свои | не определено |
-| `POST/PATCH /buyer-requirements` | 403 | свои | не определено |
-| `/ai/*`, `/optimization/*` | свои партии | 403 | не определено |
-| `POST /reservations` | 403 | да | не определено |
-| `GET /reservations` | где он продавец | где он покупатель | не определено |
-| `PATCH /reservations/{id}` | confirm, cancel, transfer | cancel (своя), complete | не определено |
-| `POST /transactions/{id}/reuse-confirmation` | 403 | покупатель сделки | не определено |
-| `GET /analytics/summary` | своя | своя (сокращённая) | не определено |
+| `/auth/me` | контекст | контекст | 403 `NO_ACTIVE_MEMBERSHIP` (использовать `/admin/api/me`) |
+| `/organizations/me` | своя | своя | 403 `NO_ACTIVE_MEMBERSHIP` |
+| `GET /materials`, `GET /materials/{id}` | свои, любой статус | только опубликованные, `MaterialPublicOut` | 403 |
+| `POST/PATCH /materials*`, images, confirm, internal-use, publish, archive | свои, по роли в организации | 403 | 403 |
+| `GET /buyer-requirements` | активные чужие без бюджета и контактов | только свои | 403 |
+| `POST/PATCH /buyer-requirements` | 403 | свои, MANAGER+ | 403 |
+| `/ai/*`, `/optimization/*` | свои партии, по роли | 403 | 403 |
+| `POST /reservations` | 403 | MEMBER+ | 403 |
+| `GET /reservations` | где он продавец | где он покупатель | 403 |
+| `PATCH /reservations/{id}` | confirm, cancel, transfer (MANAGER+) | cancel (MANAGER+), complete (MEMBER+) | 403 |
+| `POST /transactions/{id}/reuse-confirmation` | 403 | покупатель сделки, MANAGER+ | 403 |
+| `GET /analytics/summary` | своя, MANAGER+ | своя (сокращённая), MANAGER+ | 403 |
+| `/admin/api/*` | 403 | 403 | да |
 
 ## 6. Auth
 
@@ -364,7 +374,8 @@ Query:
 | `city` | string | все | Точное совпадение без учёта регистра |
 | `min_available_kg` | string (масса) | все | `available_kg >= значение` |
 | `max_price_per_kg` | string (деньги) | все | Партии без цены исключаются при заданном фильтре |
-| `q` | string (1..100) | все | Поиск по `name`, без учёта регистра |
+| `q` | string (1..100) | все | Поиск по `name` и коду `material_type`, без учёта регистра; `%` и `_` буквальные |
+| `min_kg`, `max_kg` | string (масса) | все | Псевдонимы `min_available_kg` и `max_available_kg` (см. раздел 24); `available_kg <= max` |
 | `sort` | `created_at_desc` (по умолчанию), `created_at_asc`, `price_asc`, `available_kg_desc` | все | |
 
 Response 200: `Page<MaterialOut>` для enterprise, `Page<MaterialPublicOut>` для buyer.
@@ -639,7 +650,7 @@ Response 200: `Page<ReservationOut>`.
 | `action` | Кто | Из статуса | В статус |
 | --- | --- | --- | --- |
 | `confirm` | enterprise-продавец | `pending` | `confirmed` |
-| `cancel` | enterprise-продавец (отказ, `reason` обязателен); buyer-покупатель своей заявки (допущение) | `pending`, `confirmed` | `cancelled` |
+| `cancel` | enterprise-продавец (отказ, `reason` 1..500 обязателен); buyer-покупатель своей заявки, `reason` необязателен, **только из `pending`** (R2/R3) | продавец: `pending`, `confirmed`; покупатель: `pending` | `cancelled` |
 | `transfer` | enterprise-продавец | `confirmed` | `transferred` |
 | `complete` | buyer-покупатель | `transferred` | `completed` |
 
@@ -960,7 +971,7 @@ PATCH запрос `OrganizationPatchIn` (минимум одно поле, ин
 
 **GET.** enterprise-владелец - `MaterialOut`; buyer - `MaterialPublicOut` (только опубликованные: `available`, `partially_allocated`, A17-8: `reserved`/`completed`/`archived` скрыты). Чужой или скрытый - 404 `NOT_FOUND`. Коды: 200, 401, 404.
 
-`MaterialPublicOut` (замораживаем поля): `id`, `organization_id`, `organization_name`, `name`, `material_type`, `composition`, `scrap_size`, `condition`, `price_per_kg`, `city`, `available_kg`, `status`, `images` (без ссылок), `version`, `created_at`. Нет `total_kg`, `held_kg`, `confirmed_by`, контактов.
+`MaterialPublicOut` (замораживаем поля): `id`, `organization_id`, `name`, `material_type`, `composition`, `scrap_size`, `condition`, `price_per_kg`, `city`, `available_kg`, `status`, `images` (без ссылок), `version`, `created_at`. Нет `total_kg`, `held_kg`, `confirmed_by`, контактов.
 
 **PATCH** (enterprise-владелец). Коды: 200, 401, 403, 404, 409 `VERSION_CONFLICT` / `ACTIVE_OBLIGATIONS`, 422.
 
@@ -1628,6 +1639,78 @@ Job сохраняется в БД до запуска (D-07). Недоступ�
 - A20-10: rate limit хранится в памяти процесса (один инстанс); ключ логина - IP и IP + email. IP берётся из соединения, заголовки прокси не учитываются.
 - A20-11: валидация email - простая проверка формы `local@domain.tld` (без DNS и без запрета служебных зон, чтобы `*.test` из примеров проходил).
 
+### 20.12 Организации, членства и права (фаза R1, 2026-11-07)
+
+Контракт и реализация. Переход: до введения нескольких организаций у пользователя ровно одно активное членство; `users.role` и `users.organization_id` остаются (совместимость, откат), удаляются только отдельной утверждённой миграцией.
+
+**Таблицы (миграции `0004` схема, `0005` backfill):**
+
+| Таблица / поле | Содержание |
+| --- | --- |
+| `organizations.kind` | `supplier` / `buyer`; NULL у неоднозначных записей (ручная проверка) |
+| `organization_memberships` | `id`, `user_id`, `organization_id`, `role` (`OWNER`/`MANAGER`/`MEMBER`), `status` (`active`/`pending_review`/`suspended`/`removed`), `created_at`, `created_by`; UNIQUE (`user_id`, `organization_id`); частичный UNIQUE по `user_id` WHERE `status IN ('active','pending_review')` (одно живое членство в MVP) |
+| `users.default_organization_id` | организация контекста по умолчанию (FK, nullable) |
+| `platform_admins` | `user_id` (PK, FK), `granted_at`, `granted_by`; единственный источник прав для `/admin/api/*` |
+| `audit_log` | `id`, `actor_user_id`, `organization_id`, `action`, `target_type`, `target_id`, `details` (JSON без секретов и контактов), `request_id`, `created_at` |
+
+**Права** (право -> минимальная роль, сторона). OWNER имеет все; MANAGER - все, кроме `members.manage`; MEMBER - только помеченные MEMBER.
+
+| Право | Мин. роль | Сторона | Где применяется |
+| --- | --- | --- | --- |
+| `org.read` | MEMBER | любая | `GET /organizations/me`, `GET /auth/me` |
+| `org.update` | MANAGER | любая | `PATCH /organizations/me` |
+| `members.manage` | OWNER | любая | приглашения, удаление, смена ролей (маршрутов пока нет) |
+| `material.read` | MEMBER | supplier | `GET /materials`, `GET /materials/{id}` |
+| `catalog.read` | MEMBER | buyer | те же маршруты, публичный вид |
+| `material.draft` | MEMBER | supplier | `POST /materials`; `PATCH` и `images` у партии в `draft` |
+| `material.edit_published` | MANAGER | supplier | `PATCH` и `images` у партии не в `draft` |
+| `material.confirm` | MEMBER | supplier | `POST /materials/{id}/confirm` |
+| `material.publish` | MANAGER | supplier | `POST .../publish` |
+| `material.archive` | MANAGER | supplier | `POST .../archive` |
+| `material.internal_use` | MANAGER | supplier | `POST .../internal-use` |
+| `ai.analyze` | MEMBER | supplier | `POST /ai/analyze`, `GET /ai/analyses/{id}` |
+| `planning.read` | MEMBER | supplier | `GET /optimization/runs/{id}` |
+| `planning.run` | MEMBER | supplier | `POST /ai/match`, `POST /optimization/run`; план не создаёт заявок и не меняет остатки (A20-13, утверждено владельцем) |
+| `requirement.read_public` | MEMBER | supplier | `GET /buyer-requirements` (без бюджета) |
+| `requirement.read` | MEMBER | buyer | `GET /buyer-requirements` (свои) |
+| `requirement.write` | MANAGER | buyer | `POST/PATCH /buyer-requirements` |
+| `reservation.read` | MEMBER | обе | `GET /reservations` |
+| `reservation.approve` | MANAGER | supplier | `PATCH /reservations/{id}` actions `confirm`, `transfer`, `cancel` |
+| `reservation.create` | MEMBER | buyer | `POST /reservations`, `PATCH` action `cancel` |
+| `reservation.receive` | MEMBER | buyer | `PATCH` action `complete` |
+| `match.request` | MEMBER | buyer | зарезервировано, маршрута нет |
+| `recycling.operate` | MANAGER | buyer + `recycler` | зарезервировано, маршрутов нет |
+| `reuse.confirm` | MANAGER | buyer | `POST /transactions/{id}/reuse-confirmation` |
+| `analytics.read` | MANAGER | обе | `GET /analytics/summary` |
+
+Каждое право ограничено стороной организации (колонка «Сторона») и владением ресурса (чужой ресурс - 404).
+
+**Ошибки:** `403 NO_ACTIVE_MEMBERSHIP` (нет активного членства, в том числе у платформенного admin на бизнес-маршрутах; `details: null`), `403 FORBIDDEN` (право/сторона не позволяют). Конверт не менялся.
+
+**`GET /auth/me`** (Bearer): `{ "user": UserOut, "organization": OrganizationOut, "organization_kind": "supplier|buyer|null", "membership": {"organization_id", "role", "status"}, "default_organization_id": uuid, "permissions": ["org.read", ...] }`. `permissions` вычисляется по роли и стороне. `OrganizationOut` получает дополнительное поле `kind`.
+
+**Регистрация:** в одной транзакции создаются организация (`kind` по `role`), пользователь, членство `OWNER` (`active`), `default_organization_id`, записи `audit_log` (`organization.created`, `membership.created`).
+
+**Backfill (0005, 0006; решение R1-MIGRATION-01):** `enterprise` -> `supplier`, `buyer` -> `buyer` (переработчик остаётся `buyer` с `activity_type=recycler`); единственный пользователь организации получает `OWNER` со статусом `active`; пользователи `admin` получают запись `platform_admins`, членства нет. Для неоднозначных организаций (нет стороны, несколько пользователей, конфликт признаков - enterprise и buyer вместе, enterprise с `recycler`, нет пользователей) `kind` остаётся NULL, организация не меняется, а каждый её пользователь получает членство `pending_review` (роль `MEMBER`, исходная связь с организацией сохранена). В `audit_log` пишутся `backfill.ambiguous` (с `details.reason`) и `backfill.pending_review`. Ни один пользователь с валидной связью не теряет членство (миграция 0006 завершается ошибкой и откатывается целиком, если такой остался). Миграции детерминированы (порядок `created_at, id`), идемпотентны и атомарны (транзакционный DDL PostgreSQL). Откат: `alembic downgrade 0005` удаляет только созданные 0006 членства и аудит; `downgrade 0003` возвращает схему до R1, `users.role`/`organization_id` не менялись.
+
+**Статус `pending_review`:** пользователь может войти, получить `GET /auth/me` (`membership.status = "pending_review"`, `organization_kind = null`, `permissions = []`) и `GET /organizations/me`. Любой другой защищённый маршрут - 403 `NO_ACTIVE_MEMBERSHIP` с `details: {"membership_status": "pending_review"}`. Права из непроверенного типа не выводятся. Платформенных прав нет.
+
+**Проверка и активация (только платформенный admin):**
+
+| Маршрут | Действие |
+| --- | --- |
+| `GET /admin/api/reviews?page&page_size` | очередь `pending_review`: `membership_id`, `user_id`, `user_email`, `legacy_role`, `organization_id`, `organization_name`, `activity_type`, `kind`, `review_reason`, `created_at` |
+| `POST /admin/api/memberships/{id}/activate` `{ "kind": "supplier\|buyer", "role": "OWNER\|MANAGER\|MEMBER" }` | `pending_review` -> `active`, задаёт `organizations.kind`; оба поля обязательны; 409 `INVALID_TRANSITION` (не `pending_review`), 409 `PRECONDITION_FAILED` `ORGANIZATION_KIND_MISMATCH` (у организации уже другой `kind`), 422 (`recycler` не может быть `supplier`) |
+| `POST /admin/api/memberships/{id}/reject` `{ "reason"?: string }` | `pending_review` -> `removed` |
+
+Каждое действие пишется в `audit_log` (`membership.activated`, `membership.rejected`). Автоматической активации нет. Приглашения и управление членами отложены на R1.1.
+
+**Права покупателя и переработчика (уточнение R1-MIGRATION-01):** `reservation.create` и `match.request` - с роли `MEMBER` (сторона `buyer`); `match.request` зарезервировано, маршрута пока нет. `reservation.approve` (передачи) и `members.manage` MEMBER недоступны. Переработчик (`buyer` + `recycler`) получает все права покупателя; операции переработки требуют явного `recycling.operate` (`MANAGER`+, только для `recycler`; маршрутов пока нет).
+
+**Платформенный admin:** `/admin/api/*` проверяет `platform_admins` (не `users.role`); бизнес-маршруты организаций ему недоступны (403 `NO_ACTIVE_MEMBERSHIP`). Изменение `active` пишется в `audit_log` (`user.access_changed`).
+
+Допущения и статус: владелец условно принял технический фундамент R1 (условная приёмка, см. `docs/qa/r1-live-api-device-e2e.md`). Утверждено: `reservation.create` доступен `OWNER`, `MANAGER`, `MEMBER` для сторон `buyer` (включая переработчика) - A20-12; `planning.run` доступен `OWNER`, `MANAGER`, `MEMBER` для стороны `supplier` - A20-13. Остальные права A20-13 (`reuse.confirm`, `analytics.read`, `requirement.write`) остаются у `MANAGER` и не утверждались заново. A20-14: неоднозначные организации получают `pending_review` без прав, активация только через платформенного admin.
+
 ## 21. Реализация backend v0.2 (2026-11-07)
 
 Добавлены маршруты разделов 8.9–13: потребности, matching, анализы, планы, заявки,
@@ -1676,3 +1759,106 @@ OpenAPI содержит модели запросов и ответов; миг
 
 Обычным пользователям возвращается 403, без токена — 401. Пароли, storage keys и конфигурационные
 секреты не сериализуются. Роль admin создаётся только через серверную консоль (`app.create_admin`).
+
+
+## 23. Email confirmation (proposal)
+
+Статус: **реализовано в backend (2026-11-07), одобрено владельцем**; отличия от первоначального текста - в 23.8. Реальная доставка писем **не проверена**: почтовый провайдер не настроен (блокер). Дата: 2026-11-07. Владелец: backend-engineer. Номер раздела 23, а не 21: разделы 21 («Реализация backend v0.2») и 22 уже заняты, разделы 1-22 не менялись. Всё, чего нет в ТЗ и CLAUDE.md, помечено A23-n (список в 23.7). Разделы 1-22 при расхождении уточняются этим разделом только после утверждения (23.6).
+
+### 23.1 Общие решения
+
+- Код: **6 цифр** (A23-1). Причина: при 5 попытках шанс угадать 4-значный код 5/10 000 = 0,05 % на один выданный код, 6-значный - 0,0005 %; стоимость для пользователя - две лишние цифры. Код генерируется криптостойким генератором, хранится только хеш (HMAC с серверным секретом), в открытом виде не хранится и не логируется.
+- Срок жизни кода: 10 минут (A23-2). Один активный код на email: новая отправка аннулирует предыдущий.
+- Попытки: не более 5 неверных вводов на один код (A23-3); после 5-й неверной код аннулируется, нужна новая отправка. Повторные 6+ попытки по этому email до новой отправки - 429.
+- Отправка: пауза между отправками на один email 60 секунд, не более 5 отправок в час на email и 20 в час на IP (A23-4); значения - конфигурация. Реальная почтовая интеграция (SMTP/провайдер) - вне ТЗ; адаптер за интерфейсом, как у AI (A23-5). Без настроенного адаптера вне DEMO_MODE сервис не стартует с включённым требованием подтверждения, а не молча пропускает письма.
+- Ответы не раскрывают существование аккаунта (A23-6): см. 23.2. Исключение, уже принятое в A17-5: регистрация с занятым email возвращает 409.
+- Поле пользователя `email_confirmed` (bool) и `email_confirmed_at` (datetime или null) добавляются в `UserOut` (3.4) и `LoginOut.user` (A23-7). Изменение email после подтверждения в v1 невозможно.
+
+### 23.2 POST /auth/email-code/send
+
+Роль: аноним. Тело `EmailCodeSendIn` (лишние поля - 422 `extra_forbidden`): `{ "email": "seller@example.test" }`, email валидный, до 254, регистр не учитывается. Коды: 202, 422 `VALIDATION_ERROR`, 429 `RATE_LIMITED`.
+
+Ответ **всегда** 202 с одним и тем же телом, независимо от того, есть ли такой аккаунт, подтверждён ли он и отправлено ли письмо:
+
+```json
+{ "status": "accepted", "resend_after_seconds": 60 }
+```
+
+Письмо уходит, только если аккаунт существует и `email_confirmed = false`; иначе ничего не отправляется, ответ тот же и по времени неотличим (A23-6). 429: заголовок `Retry-After: <целое секунд >= 1>`, `details: {"retry_after_seconds": N}` (формат 18.9 Q3); лимит по паре «IP + email» и по IP отдельно, считается и для несуществующих email. Код в ответе не возвращается никогда, в том числе в demo.
+
+### 23.3 POST /auth/email-code/verify
+
+Роль: аноним. Тело `EmailCodeVerifyIn`: `{ "email": "...", "code": "123456" }`. `code` - строка ровно из 6 ASCII-цифр (пробелы по краям обрезаются, другие символы - ошибка). Коды: 200, 409, 422, 429.
+
+| Ситуация | Ответ |
+| --- | --- |
+| Формат `email`/`code` неверен (не 6 цифр, не строка) | 422 `VALIDATION_ERROR`, `field: "code"` / `"email"` |
+| Код верен | 200 `{ "user": UserOut }` с `email_confirmed = true`, `email_confirmed_at` заполнен. Токен **не** выдаётся: дальше обычный `POST /auth/login` |
+| Код неверен | 409 `INVALID_CODE`, `details: {"attempts_left": 3}` |
+| Код истёк (прошло > 10 мин) | 409 `CODE_EXPIRED`; нужна новая отправка |
+| Лимит попыток исчерпан | 429 `RATE_LIMITED` с `Retry-After` (до конца блокировки, 15 минут, A23-8) |
+| Аккаунта нет, код не запрашивался, аккаунт уже подтверждён | как неверный код: 409 `INVALID_CODE` без `attempts_left` (A23-6, не раскрывает существование); для уже подтверждённого и верного кода повтор - 200 без изменений (идемпотентно, A23-9) |
+
+Код погашается при успехе (повторно не используется). Код и значения попыток не пишутся в логи; в логах только `request_id` и безопасный результат. Сравнение кода - за постоянное время.
+
+### 23.4 Правило входа до подтверждения
+
+Решение: **вход по паролю запрещён**: `POST /auth/login` для неподтверждённого email возвращает `403 EMAIL_NOT_CONFIRMED` (A23-10), отдельный от `ACCOUNT_DISABLED`; токен не выдаётся. Условие как в A18-21: пароль проверяется первым; 403 только если email найден **и пароль верен** и `email_confirmed = false`. Неверный пароль или неизвестный email - прежний 401 `INVALID_CREDENTIALS`. `details: {"resend_after_seconds": N}` не обязателен; клиент переводит пользователя на экран ввода кода и вызывает `send`.
+
+Обоснование: режим «вход с ограничениями» потребовал бы проверки подтверждения на каждом маршруте и объяснения «что можно» в каждой матрице доступа (раздел 5), а подтверждение ничего не защищает, если неподтверждённый пользователь может публиковать партии и подавать заявки. Блокировка входа - одна проверка в одном месте. Недостаток - лишний шаг в демо; смягчается кодом из 23.5. Проверка порядка в login: 429 -> пароль -> `active` (ACCOUNT_DISABLED) -> `email_confirmed` (EMAIL_NOT_CONFIRMED). Ранее выданные токены подтверждённых пользователей действуют. Существующие учётные записи (созданные до включения функции, включая `admin` из `app.create_admin`) помечаются `email_confirmed = true` миграцией (A23-11).
+
+### 23.5 Демо-код
+
+Допущение A23-12, **требует явного подтверждения заказчика до реализации**: при `DEMO_MODE=true` код `7777` принимается как верный для любого email, ожидающего подтверждения; 7777 содержит 4 цифры, поэтому в demo формат `code` допускает 4 или 6 цифр, вне demo - только 6.
+- Включается исключительно флагом `DEMO_MODE=true` в конфигурации backend. Клиент не может включить его; код не хранится в клиенте и не возвращается API.
+- В production (любое окружение, где `DEMO_MODE` не `true`, и любое окружение с настоящей почтой) код 7777 не действует: тот же ответ 409 `INVALID_CODE`. Backend с `DEMO_MODE=true` вместе с production-признаками (реальный провайдер почты, production-секреты) отказывается стартовать (A23-13).
+- Демо-код проверяется до счётчика попыток и не расходует их; в журнал пишется безопасное событие «подтверждено демо-кодом» без значения кода.
+- Клиент в demo может показать подсказку «Демо-режим», только если `GET /health` сообщает режим (сейчас не сообщает; поле не добавляется этим разделом, A23-14).
+- Подтверждение этим способом - не настоящая проверка владения почтой; честное обозначение режима обязательно (CLAUDE.md §6, §16).
+
+### 23.6 Что меняется в существующих разделах после утверждения
+
+Только перечень, сейчас не применяется: 3.4/`UserOut` и `LoginOut` (+2 поля), 1.2 (+`EMAIL_NOT_CONFIRMED` 403, `INVALID_CODE` 409, `CODE_EXPIRED` 409), 1.4 (+лимит двух новых маршрутов), 6.2/17.3/18.2 (403 `EMAIL_NOT_CONFIRMED`), 15 (+2 маршрута, auth-маршруты без токена), миграция (`users.email_confirmed`, `email_confirmed_at`, таблица кодов). Frontend: экран ввода кода, обработка 403 `EMAIL_NOT_CONFIRMED` на логине, 409 `INVALID_CODE` (`attempts_left`), 409 `CODE_EXPIRED`, 429 с обратным отсчётом, кнопка «Отправить код ещё раз» с паузой `resend_after_seconds`.
+
+### 23.7 Допущения раздела 23
+
+- A23-1: код 6 цифр.
+- A23-2: срок кода 10 минут, один активный код на email.
+- A23-3: 5 неверных попыток на код.
+- A23-4: пауза 60 с, 5 отправок в час на email, 20 в час на IP; конфигурация.
+- A23-5: почтовый адаптер за интерфейсом; провайдер не выбран (блокер).
+- A23-6: `send` всегда 202; `verify` для неизвестного/неподтверждаемого состояния - как неверный код.
+- A23-7: `email_confirmed`, `email_confirmed_at` в `UserOut`.
+- A23-8: блокировка проверки 15 минут после исчерпания попыток.
+- A23-9: повтор verify для уже подтверждённого с верным кодом - 200.
+- A23-10: вход до подтверждения - 403 `EMAIL_NOT_CONFIRMED`, только после верного пароля.
+- A23-11: существующие записи помечаются подтверждёнными миграцией.
+- A23-12: демо-код 7777 при `DEMO_MODE=true`, требует подтверждения заказчика.
+- A23-13: `DEMO_MODE=true` с production-признаками - отказ старта.
+- A23-14: `/health` режим не раскрывает.
+
+### 23.8 Реализация и отличия от текста 23.1-23.7
+
+Реализовано: `POST /auth/email-code/send`, `POST /auth/email-code/verify`, 403 `EMAIL_NOT_CONFIRMED` на логине, миграция `0003` (`users.email_confirmed`, `users.email_confirmed_at`, таблица `email_codes`; все существующие учётные записи, включая admin, помечены подтверждёнными), `UserOut` содержит `email_confirmed` и `email_confirmed_at`. `app.create_admin` создаёт подтверждённого администратора. Проверено тестами на PostgreSQL (`tests/integration/test_email_confirmation.py`) с поддельным почтовым адаптером. Реальное письмо не отправлялось.
+
+Отличия и уточнения:
+- **503 `EMAIL_DELIVERY_UNAVAILABLE`** - исключение из «всегда 202» (одобрено владельцем). Возвращается вне `DEMO_MODE`, если не настроен почтовый провайдер (`MAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_FROM`) или нет `EMAIL_CODE_HMAC_KEY`. Ответ одинаков для любого email, существование аккаунта не раскрывается; о «отправке» сервер не сообщает без реального провайдера. 202 означает «принято»: письмо отправляется фоновой задачей после ответа, ошибка SMTP в ней пишется в лог без кода и адресата и клиенту не возвращается (A23-15).
+- **Пауза 60 с и часовые лимиты** считаются процессным лимитером по email и IP (как остальные лимиты, не общий между воркерами) для любого email, поэтому 429 не зависит от наличия аккаунта (A23-16). Ответ: `Retry-After` и `details.retry_after_seconds`.
+- **Блокировка**: пятая неверная попытка возвращает 409 `INVALID_CODE` с `attempts_left = 0`, дальнейшие `verify` до конца 15 минут - 429 (даже с верным кодом). В период блокировки `send` отвечает 202, но новый код не создаётся (A23-17).
+- **Хеш**: HMAC-SHA256 от `user_id:code` с ключом `EMAIL_CODE_HMAC_KEY` (>= 32 символов, без значения по умолчанию).
+- **Демо** (`DEMO_MODE=true`): код `7777` (4 цифры) подтверждает существующего пользователя, не расходует попытки и не требует отправки; другие 4-значные коды - 409 `INVALID_CODE`; `send` ничего не отправляет. `seller@demo.arta` подтверждается при первом входе без кода (только в demo; сейчас такой учётной записи в seed нет, A23-18). Вне demo 4-значный код - 422, а `777777` - обычный неверный код. Запуск отклоняется при `DEMO_MODE=true` вместе с `APP_ENV=production` или `MAIL_PROVIDER=smtp`.
+- Настройки (env): `EMAIL_CODE_HMAC_KEY`, `MAIL_PROVIDER` (`disabled`|`smtp`), `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS`, `EMAIL_CODE_TTL_SECONDS`, `EMAIL_CODE_MAX_ATTEMPTS`, `EMAIL_CODE_LOCK_SECONDS`, `EMAIL_RESEND_COOLDOWN_SECONDS`, `EMAIL_SEND_PER_HOUR_EMAIL`, `EMAIL_SEND_PER_HOUR_IP`.
+- Разделы 1-22 не обновлялись (перечень в 23.6 остаётся к применению).
+- A23-15: письмо уходит фоновой задачей, сбой доставки клиенту не виден. A23-16: лимитер процессный. A23-17: блокировка не обходится новой отправкой. A23-18: автоподтверждение demo-продавца при входе.
+
+
+## 24. R2/R3: сделки и каталог покупателя (backend)
+
+- **GET /transactions** (`reservation.read`, своя сторона): `Page<TransactionViewOut>`; query `page`, `page_size`, `status` (ReservationStatus, повторяемый). **GET /transactions/{id}**: чужая или несуществующая - 404.
+  `TransactionViewOut`: `id`, `reservation_id`, `material_id`, `material_name`, `material_type`, `material_city`, `status` (статус заявки), `transferred_kg` (string), `sale_amount_kgs` (string, 0.01), `transfer_confirmed_at`, `receipt_confirmed_at` (null до `complete`), `confirmed_reuse_kg`, `created_at`. Контактов и баланса партии нет.
+- **GET /materials**: добавлены `max_available_kg`, псевдонимы `min_kg`/`max_kg`, `sort` дополнен `created_desc`, `mass_desc`, `mass_asc` (старые значения сохранены). Покупатель по-прежнему видит только `MaterialPublicOut`. Поле `organization_name` удалено из `MaterialPublicOut` (принятое по умолчанию решение: до заявки покупатель видит только город и тип).
+- **ReservationOut**: добавлено `buyer_organization_name` (string для продавца, null для покупателя); `cancelled_by_role` и `cancel_reason` уже возвращались.
+- **Отмена покупателем** из `confirmed` - 409 `INVALID_TRANSITION` (удержание снимает только продавец).
+- **POST /reservations**: не более одной активной (`pending`/`confirmed`) заявки покупателя на партию - иначе 409 `ACTIVE_RESERVATION_EXISTS` (`details.reservation_id`). Проверка под блокировкой строки партии.
+- **422**: `details.missing` - список имён полей (строки) для публикации (`PUBLISH_REQUIREMENTS_NOT_MET`) и для любой `VALIDATION_ERROR` из `validation_error` (содержит одно поле).
+- **Аудит**: `reservation.created|confirmed|cancelled|transferred|completed` с актором и организацией, `details` - только id и числа. Повтор без изменения состояния аудит не пишет. См. `docs/architecture/reservation-lifecycle.md`.

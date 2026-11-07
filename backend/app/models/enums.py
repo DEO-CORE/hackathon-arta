@@ -45,3 +45,25 @@ class MaterialStatus(StrEnum):
     partially_allocated = "partially_allocated"
     completed = "completed"
     archived = "archived"
+
+
+class OrganizationKind(StrEnum):
+    """Side of the marketplace; the source of side-specific permissions (api.md 20.12)."""
+
+    supplier = "supplier"
+    buyer = "buyer"
+
+
+class OrgRole(StrEnum):
+    OWNER = "OWNER"
+    MANAGER = "MANAGER"
+    MEMBER = "MEMBER"
+
+
+class MembershipStatus(StrEnum):
+    active = "active"
+    # Legacy organization whose side could not be derived: no rights until a platform admin
+    # reviews it (docs/api.md 20.12).
+    pending_review = "pending_review"
+    suspended = "suspended"
+    removed = "removed"

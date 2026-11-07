@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/format/mass_format.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/session/org_context.dart';
 import '../../../core/session/session.dart';
+import '../../auth/providers/org_context_provider.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
@@ -14,7 +16,9 @@ import '../models/lifecycle_error.dart';
 import '../models/material_models.dart';
 import '../models/publish_requirements.dart';
 import '../providers/material_providers.dart';
+import '../../reservations/presentation/reserve_sheet.dart';
 import 'material_photo.dart';
+import 'publish_sheet.dart';
 import 'status_chip.dart';
 
 class MaterialDetailScreen extends ConsumerWidget {
@@ -89,7 +93,8 @@ class _Body extends ConsumerWidget {
         : loaded;
     final isOwner =
         ref.watch(sessionProvider).user?.role == UserRole.enterprise &&
-            item.isOwnerView;
+            item.isOwnerView &&
+            ref.watch(canProvider(Perm.materialsEdit));
     final left = [
       _Header(item: item),
       const SizedBox(height: AppSpacing.md),
@@ -108,7 +113,27 @@ class _Body extends ConsumerWidget {
         _AnalysisRow(item: item),
       ],
     ];
-    final primary = isOwner ? _primaryAction(ref, item) : null;
+    // Result screens (pushed with Navigator, no new GoRouter routes).
+    ref.listen(lifecycleProvider, (prev, next) {
+      final it = next.item;
+      if (it != null &&
+          next.lastAction == LifecycleAction.publish &&
+          !next.busy &&
+          next.error == null &&
+          prev?.item?.version != it.version &&
+          it.status != MaterialStatus.draft) {
+        _showSuccess(context, 'Партия опубликована',
+            'Теперь партию видят покупатели в каталоге.', it);
+      }
+    });
+    ref.listen(confirmMaterialProvider, (prev, next) {
+      if (next.done && !(prev?.done ?? false)) {
+        _showSuccess(context, 'Характеристики подтверждены',
+            'Теперь они используются в подборе и плане.', item);
+      }
+    });
+    final primary =
+        isOwner ? _primaryAction(ref, item) : _buyerAction(context, ref, item);
     return Column(
       children: [
         Expanded(
@@ -125,17 +150,19 @@ class _Body extends ConsumerWidget {
                         children: [
                           Expanded(
                               child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: left)),
                           const SizedBox(width: AppSpacing.xl),
                           Expanded(
                               child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: right)),
                         ],
                       )
                     : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           ...left,
                           const SizedBox(height: AppSpacing.md),
@@ -152,6 +179,31 @@ class _Body extends ConsumerWidget {
   }
 }
 
+void _showSuccess(
+    BuildContext context, String title, String message, MaterialItem it) {
+  final router = GoRouter.of(context);
+  final mass = formatKg(it.balance?.totalKg ?? it.availableKg);
+  Navigator.of(context).push(MaterialPageRoute<void>(
+    fullscreenDialog: true,
+    builder: (ctx) => AppSuccessScreen(
+      title: title,
+      message: message,
+      summary: [
+        ('Название', it.name),
+        ('Статус', it.status.label),
+        ('Масса', mass),
+      ],
+      secondaryLabel: 'К партии',
+      onSecondary: () => Navigator.of(ctx).pop(),
+      primaryLabel: 'К каталогу',
+      onPrimary: () {
+        Navigator.of(ctx).pop();
+        router.go('/materials');
+      },
+    ),
+  ));
+}
+
 class _Header extends StatelessWidget {
   const _Header({required this.item});
   final MaterialItem item;
@@ -161,10 +213,15 @@ class _Header extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(item.name, style: AppTypography.headline),
-        const SizedBox(height: 8),
-        MaterialStatusChip(status: item.status),
-        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(item.name, style: AppTypography.headline)),
+            const SizedBox(width: AppSpacing.md),
+            Flexible(child: MaterialStatusChip(status: item.status)),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
         Text(statusHelper(item.status),
             style: AppTypography.bodySmall
                 .copyWith(color: AppColors.textSecondary)),
@@ -234,7 +291,6 @@ class _Characteristics extends StatelessWidget {
             ? 'Цена не указана'
             : '${item.pricePerKg} KGS/кг'
       ),
-      if (item.organizationName != null) ('Продавец', item.organizationName!),
     ];
     return AppCard(
         child: Column(
@@ -267,29 +323,59 @@ class _Balance extends StatelessWidget {
   const _Balance({required this.item});
   final MaterialItem item;
 
+  // Segment width only: a layout weight, not a business figure.
+  static double _w(String v) => double.tryParse(v) ?? 0;
+
   @override
   Widget build(BuildContext context) {
     final b = item.balance;
     // Values come from the server as-is; the client never sums masses.
+    final free = b?.availableKg ?? item.availableKg;
     return AppCard(
         child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Масса, кг', style: AppTypography.title),
-        const SizedBox(height: AppSpacing.md),
-        if (b == null)
-          Text('Свободно: ${formatKg(item.availableKg)}',
-              style: AppTypography.headline)
-        else ...[
-          AppStatTriplet(
-            freeKg: formatDecimal(b.availableKg),
-            reservedKg: formatDecimal(b.heldKg),
-            transferredKg: formatDecimal(b.transferredKg),
-            totalKg: formatDecimal(b.totalKg),
-          ),
+        const SizedBox(height: AppSpacing.sm),
+        Text('Свободно', style: AppTypography.caption),
+        Text.rich(TextSpan(children: [
+          TextSpan(
+              text: formatDecimal(free),
+              style: AppTypography.display.copyWith(
+                  fontSize: 44, height: 52 / 44, fontWeight: FontWeight.w500)),
+          TextSpan(
+              text: '\u00A0кг',
+              style:
+                  AppTypography.body.copyWith(color: AppColors.textSecondary)),
+        ])),
+        if (b != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          AppMassBar(segments: [
+            AppMassSegment(
+                kind: AppMassKind.free,
+                label: 'Свободно',
+                valueText: formatKg(b.availableKg),
+                weight: _w(b.availableKg)),
+            AppMassSegment(
+                kind: AppMassKind.reserved,
+                label: 'Зарезервировано',
+                valueText: formatKg(b.heldKg),
+                weight: _w(b.heldKg)),
+            AppMassSegment(
+                kind: AppMassKind.transferred,
+                label: 'Передано',
+                valueText: formatKg(b.transferredKg),
+                weight: _w(b.transferredKg)),
+            AppMassSegment(
+                kind: AppMassKind.internal,
+                label: 'Использовано внутри',
+                valueText: formatKg(b.internallyUsedKg),
+                weight: _w(b.internallyUsedKg)),
+          ]),
           Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.xs),
-            child: Text('Использовано внутри: ${formatKg(b.internallyUsedKg)}'),
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: Text('Всего ${formatKg(b.totalKg)}',
+                style: AppTypography.caption),
           ),
         ],
       ],
@@ -365,7 +451,9 @@ Widget? _primaryAction(WidgetRef ref, MaterialItem item) {
       ),
     );
   }
-  if (isDraft && missingPublishFields(item).isEmpty) {
+  if (isDraft &&
+      missingPublishFields(item).isEmpty &&
+      ref.watch(canProvider(Perm.materialsPublish))) {
     return Builder(
       builder: (context) => AppButton(
         label: 'Опубликовать',
@@ -374,12 +462,7 @@ Widget? _primaryAction(WidgetRef ref, MaterialItem item) {
         onPressed: busy
             ? null
             : () async {
-                final ok = await _ask(
-                  context,
-                  'Опубликовать партию?',
-                  'Партия станет видна покупателям. Масса и характеристики будут ограничены в изменении при активных заявках.',
-                  'Опубликовать',
-                );
+                final ok = await showPublishSheet(context, item);
                 if (ok) {
                   await ref.read(lifecycleProvider.notifier).publish(item);
                 }
@@ -565,4 +648,25 @@ class LifecycleErrorView extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Buyer side: request a reservation. Display convenience only; the server
+/// re-checks permission, stock and status on POST /reservations.
+Widget? _buyerAction(BuildContext context, WidgetRef ref, MaterialItem item) {
+  if (item.isOwnerView || !ref.watch(canProvider(Perm.reservationCreate))) {
+    return null;
+  }
+  final open = item.status == MaterialStatus.available ||
+      item.status == MaterialStatus.partiallyAllocated;
+  final free = double.tryParse(item.availableKg) ?? 0;
+  if (!open || free <= 0) {
+    return const Text('Свободной массы нет.', textAlign: TextAlign.center);
+  }
+  return AppButton(
+    label: 'Запросить резерв',
+    onPressed: () async {
+      final created = await showReserveSheet(context, item);
+      if (created) ref.invalidate(materialDetailProvider(item.id));
+    },
+  );
 }

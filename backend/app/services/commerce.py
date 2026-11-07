@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.errors import AppError, error_body, not_found, validation_error
@@ -26,7 +26,9 @@ from app.schemas.commerce import (
     RequirementPublic,
     ReservationOut,
     TransactionOut,
+    TransactionViewOut,
 )
+from app.services import audit
 from app.services.inventory import refresh_status
 from app.services.materials import BUYER_VISIBLE, get_owned, material_out, parse_uuid_or_404
 
@@ -126,8 +128,19 @@ def reservation_out(db, r, user):
         **{
             k: getattr(r, k)
             for k in ReservationOut.model_fields
-            if k not in ("material_name", "transaction", "counterparty_contacts")
+            if k
+            not in (
+                "material_name",
+                "transaction",
+                "counterparty_contacts",
+                "buyer_organization_name",
+            )
         },
+        buyer_organization_name=(
+            db.get(Organization, r.buyer_organization_id).name
+            if user.role == Role.enterprise
+            else None
+        ),
         material_name=db.get(Material, r.material_id).name,
         transaction=TransactionOut.model_validate(transaction) if transaction else None,
         counterparty_contacts=contacts,
@@ -167,6 +180,17 @@ def create_reservation(db, user, data):
     m = db.scalar(select(Material).where(Material.id == data.material_id).with_for_update())
     if m is None or m.status not in BUYER_VISIBLE or m.organization_id == user.organization_id:
         raise not_found()
+    active = db.scalar(
+        select(Reservation.id)
+        .where(
+            Reservation.material_id == m.id,
+            Reservation.buyer_organization_id == user.organization_id,
+            Reservation.status.in_(("pending", "confirmed")),
+        )
+        .limit(1)
+    )
+    if active is not None:  # material row is locked, so concurrent creates serialize here
+        raise AppError(409, "ACTIVE_RESERVATION_EXISTS", details={"reservation_id": str(active)})
     check_stock(m, data.quantity_kg)
     price = data.agreed_price_per_kg if data.agreed_price_per_kg is not None else m.price_per_kg
     if price is None:
@@ -190,7 +214,84 @@ def create_reservation(db, user, data):
     )
     db.add(r)
     db.flush()
+    _audit(db, user, "reservation.created", r)
     return reservation_out(db, r, user)
+
+
+def _audit(db, user, action, r, **details):
+    # Ids and numbers only: no contacts, reasons or free text.
+    audit.record(
+        db,
+        action,
+        actor_user_id=user.id,
+        organization_id=user.organization_id,
+        target_type="reservation",
+        target_id=r.id,
+        details={"material_id": str(r.material_id), "quantity_kg": f"{r.quantity_kg:.3f}"}
+        | details,
+    )
+
+
+def transaction_view(db, t, r) -> TransactionViewOut:
+    m = db.get(Material, r.material_id)
+    return TransactionViewOut(
+        id=t.id,
+        reservation_id=r.id,
+        material_id=m.id,
+        material_name=m.name,
+        material_type=m.material_type,
+        material_city=m.city,
+        status=r.status,
+        transferred_kg=t.transferred_kg,
+        sale_amount_kgs=t.sale_amount_kgs,
+        transfer_confirmed_at=t.transfer_confirmed_at,
+        receipt_confirmed_at=t.receipt_confirmed_at,
+        confirmed_reuse_kg=t.confirmed_reuse_kg,
+        created_at=t.created_at,
+    )
+
+
+def _party_column(user):
+    return (
+        Reservation.seller_organization_id
+        if user.role == Role.enterprise
+        else (Reservation.buyer_organization_id)
+    )
+
+
+def list_transactions(db, user, page, page_size, status):
+    stmt = (
+        select(Transaction, Reservation)
+        .join(Reservation, Reservation.id == Transaction.reservation_id)
+        .where(_party_column(user) == user.organization_id)
+    )
+    if status:
+        stmt = stmt.where(Reservation.status.in_(status))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.execute(
+        stmt.order_by(Transaction.created_at.desc(), Transaction.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return dict(
+        items=[transaction_view(db, t, r) for t, r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def get_transaction(db, user, raw_id):
+    row = db.execute(
+        select(Transaction, Reservation)
+        .join(Reservation, Reservation.id == Transaction.reservation_id)
+        .where(
+            Transaction.id == parse_uuid_or_404(raw_id), _party_column(user) == user.organization_id
+        )
+    ).first()
+    if row is None:
+        raise not_found()
+    return transaction_view(db, *row)
 
 
 def owned_reservation(db, user, raw_id):
@@ -204,12 +305,14 @@ def owned_reservation(db, user, raw_id):
 
 def act(db, user, raw_id, data):
     r = owned_reservation(db, user, raw_id)
-    if (
-        data.action in ("confirm", "transfer")
-        and user.role != Role.enterprise
-        or data.action == "complete"
-        and user.role != Role.buyer
-    ):
+    # Authorization (after the 404 party check) precedes any business-state check.
+    required = {
+        "confirm": "reservation.approve",
+        "transfer": "reservation.approve",
+        "complete": "reservation.receive",
+        "cancel": "reservation.approve" if user.role == Role.enterprise else "reservation.create",
+    }[data.action]
+    if not user.can(required):
         raise AppError(403, "FORBIDDEN")
     if data.action == "cancel" and user.role == Role.enterprise and not data.reason:
         raise validation_error("reason", "required", "Укажите причину отказа.")
@@ -252,6 +355,9 @@ def act(db, user, raw_id, data):
     }
     if r.status not in allowed[data.action]:
         raise AppError(409, "INVALID_TRANSITION")
+    # A buyer withdraws only a pending application; once stock is held, only the seller releases it.
+    if data.action == "cancel" and user.role != Role.enterprise and r.status != "pending":
+        raise AppError(409, "INVALID_TRANSITION")
     quantity = r.quantity_kg
     if data.action == "confirm":
         if m.status not in BUYER_VISIBLE or m.confirmed_at is None:
@@ -290,9 +396,13 @@ def act(db, user, raw_id, data):
             select(Transaction).where(Transaction.reservation_id == r.id).with_for_update()
         )
         t.receipt_confirmed_at = utcnow()
-    r.status = target
+    previous, r.status = r.status, target
     refresh_status(m)
     db.flush()
+    details = {"from": previous}
+    if data.action == "transfer":
+        details["transferred_kg"] = f"{actual:.3f}"
+    _audit(db, user, f"reservation.{target}", r, **details)
     return reservation_out(db, r, user)
 
 
