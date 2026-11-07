@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/tab_shell.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../../../demo/demo_reset_section.dart';
 import '../../auth/models/auth_models.dart';
@@ -16,16 +18,25 @@ class OrganizationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final org = ref.watch(organizationProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Организация'),
-        leading: IconButton(
-          tooltip: 'Назад',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
+    return AppTabShell(
+      tab: AppTab.organization,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppTopBar(
+          title: 'Организация',
+          onBack: () => context.go('/'),
         ),
+        body: Builder(builder: (context) => _body(context, ref, org)),
       ),
-      body: org.when(
+    );
+  }
+
+  Widget _body(
+      BuildContext context, WidgetRef ref, AsyncValue<Organization> org) {
+    return Padding(
+      // Keep the last control above the floating nav.
+      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+      child: org.when(
         loading: () => const Center(
           child: CircularProgressIndicator(semanticsLabel: 'Загрузка…'),
         ),

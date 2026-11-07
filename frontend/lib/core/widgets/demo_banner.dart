@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_tokens.dart';
+
 /// Always visible in demo mode so synthetic data is never mistaken for real.
 class DemoBanner extends StatelessWidget {
   const DemoBanner({super.key});
@@ -7,7 +9,7 @@ class DemoBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF333333),
+      color: AppColors.demoBanner,
       child: SafeArea(
         bottom: false,
         child: Semantics(
@@ -17,7 +19,7 @@ class DemoBanner extends StatelessWidget {
             child: Text(
               'Демо: синтетические данные, не реальные',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: AppColors.surface, fontSize: 13),
             ),
           ),
         ),

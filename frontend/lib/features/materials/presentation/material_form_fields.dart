@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_text_field.dart';
 import '../models/material_enums.dart';
 import '../models/material_rules.dart';
 import 'material_form_model.dart';
@@ -22,21 +24,19 @@ class MaterialFormFields extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const gap = SizedBox(height: 12);
+    const gap = SizedBox(height: AppSpacing.lg);
     return ListenableBuilder(
       listenable: model,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextFormField(
+          AppTextField(
             controller: model.name,
             enabled: enabled,
             textInputAction: TextInputAction.next,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
-              labelText: 'Название (обязательно)',
-              errorText: fieldErrors['name'],
-            ),
+            label: 'Название (обязательно)',
+            errorText: fieldErrors['name'],
             validator: (v) => validateRequiredText(v,
                 emptyMessage: 'Укажите название партии.'),
           ),
@@ -75,72 +75,62 @@ class MaterialFormFields extends StatelessWidget {
                 requireAll && v == null ? 'Выберите состояние.' : null,
           ),
           gap,
-          TextFormField(
+          AppTextField(
             controller: model.mass,
             enabled: enabled,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textInputAction: TextInputAction.next,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
-              labelText: 'Масса',
-              suffixText: 'кг',
-              helperText: 'Укажите массу в килограммах, например 12,5.',
-              errorText: fieldErrors['total_kg'],
-            ),
+            label: 'Масса',
+            suffixText: 'кг',
+            helper: 'Укажите массу в килограммах, например 12,5.',
+            errorText: fieldErrors['total_kg'],
             validator: validateDraftMassKg,
           ),
           gap,
-          TextFormField(
+          AppTextField(
             controller: model.city,
             enabled: enabled,
             textInputAction: TextInputAction.next,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
-              labelText: 'Город',
-              errorText: fieldErrors['city'],
-            ),
+            label: 'Город',
+            errorText: fieldErrors['city'],
             validator: (v) => requireAll
                 ? validateRequiredText(v,
                     emptyMessage: 'Укажите город.', max: 100)
                 : null,
           ),
           gap,
-          TextFormField(
+          AppTextField(
             controller: model.scrapSize,
             enabled: enabled,
             textInputAction: TextInputAction.next,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
-              labelText: 'Размер обрезков (необязательно)',
-              errorText: fieldErrors['scrap_size'],
-            ),
+            label: 'Размер обрезков (необязательно)',
+            errorText: fieldErrors['scrap_size'],
             validator: (v) => validateOptionalText(v, max: 100),
           ),
           gap,
-          TextFormField(
+          AppTextField(
             controller: model.composition,
             enabled: enabled,
             textInputAction: TextInputAction.next,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
-              labelText: 'Состав (необязательно)',
-              helperText: 'Если состав неизвестен, оставьте пустым.',
-              errorText: fieldErrors['composition'],
-            ),
+            label: 'Состав (необязательно)',
+            helper: 'Если состав неизвестен, оставьте пустым.',
+            errorText: fieldErrors['composition'],
             validator: (v) => validateOptionalText(v),
           ),
           gap,
-          TextFormField(
+          AppTextField(
             controller: model.price,
             enabled: enabled,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
-              labelText: 'Цена за кг (необязательно)',
-              suffixText: 'KGS/кг',
-              helperText: 'Оставьте пустым, если цена не определена.',
-              errorText: fieldErrors['price_per_kg'],
-            ),
+            label: 'Цена за кг (необязательно)',
+            suffixText: 'KGS/кг',
+            helper: 'Оставьте пустым, если цена не определена.',
+            errorText: fieldErrors['price_per_kg'],
             validator: validatePriceKgs,
           ),
         ],

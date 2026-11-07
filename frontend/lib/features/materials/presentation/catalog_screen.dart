@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/tab_shell.dart';
 import '../../../core/session/session.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../../auth/models/auth_models.dart';
 import '../models/material_enums.dart';
 import '../models/material_models.dart';
 import '../providers/material_providers.dart';
-import 'material_photo.dart';
-import 'status_chip.dart';
+import 'material_photo_card.dart';
 
 class CatalogScreen extends ConsumerWidget {
   const CatalogScreen({super.key});
@@ -28,8 +30,9 @@ class CatalogScreen extends ConsumerWidget {
 
     Widget body;
     if (s.loading) {
-      body = const Center(
-        child: CircularProgressIndicator(semanticsLabel: 'Загрузка…'),
+      body = const SingleChildScrollView(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: AppSkeletonList(),
       );
     } else if (s.error != null) {
       body = Padding(
@@ -44,24 +47,51 @@ class CatalogScreen extends ConsumerWidget {
         onCreate: create,
       );
     } else {
-      body = _List(state: s, isOwner: isOwner);
+      body = const SizedBox.shrink(); // replaced by the list below
     }
 
-    return Scaffold(
-      appBar: AppBar(title: Text(isOwner ? 'Мои партии' : 'Каталог')),
-      floatingActionButton: isOwner
-          ? FloatingActionButton.extended(
-              onPressed: create,
-              icon: const Icon(Icons.add),
-              label: const Text('Создать партию'),
-            )
-          : null,
-      body: Column(
-        children: [
-          if (isOwner)
-            _StatusFilter(selected: s.status, onChanged: ctrl.setStatus),
-          Expanded(child: body),
-        ],
+    return AppTabShell(
+      tab: AppTab.materials,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppTopBar(
+          title: isOwner ? 'Мои партии' : 'Каталог',
+          onBack: tabBack(context),
+        ),
+        body: Builder(builder: (context) {
+          final header = Column(
+            children: [
+              if (isOwner)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                  child: AppContentColumn(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      // "Создать" (not "Создать партию") so the label is not
+                      // duplicated with the empty-state button.
+                      child: SizedBox(
+                        width: 168,
+                        child: AppButton(
+                          label: 'Создать',
+                          icon: Icons.add,
+                          onPressed: create,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (isOwner)
+                _StatusFilter(selected: s.status, onChanged: ctrl.setStatus),
+            ],
+          );
+          // In the list state the header scrolls with the cards, so large
+          // text sizes never squeeze the list into a few pixels.
+          if (!s.loading && s.error == null && s.items.isNotEmpty) {
+            return _List(state: s, isOwner: isOwner, header: header);
+          }
+          return Column(children: [header, Expanded(child: body)]);
+        }),
       ),
     );
   }
@@ -82,30 +112,35 @@ class _StatusFilter extends StatelessWidget {
       MaterialStatus.completed,
       MaterialStatus.archived,
     ];
-    return SizedBox(
-      height: 56,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: const Text('Все'),
-              selected: selected == null,
-              onSelected: (_) => onChanged(null),
-            ),
+    // Wrap (not a horizontal scroller): long labels such as "Частично
+    // распределено" are never cut off and nothing is hidden off-screen.
+    Widget chip(String label, bool selected, VoidCallback onTap) => ChoiceChip(
+          label: Text(label),
+          selected: selected,
+          showCheckmark: true,
+          shape: const StadiumBorder(),
+          side: const BorderSide(color: AppColors.controlBorder),
+          selectedColor: AppColors.primaryContainer,
+          backgroundColor: AppColors.surface,
+          onSelected: (_) => onTap(),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+      child: AppContentColumn(
+        maxWidth: 1100,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            children: [
+              chip('Все', selected == null, () => onChanged(null)),
+              for (final st in shown)
+                chip(st.label, selected == st, () => onChanged(st)),
+            ],
           ),
-          for (final st in shown)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(st.label),
-                selected: selected == st,
-                onSelected: (_) => onChanged(st),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -139,11 +174,12 @@ class _Empty extends StatelessWidget {
             Text(text, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             if (filtered)
-              OutlinedButton(
-                  onPressed: onReset, child: const Text('Сбросить фильтры'))
+              AppButton(
+                  kind: AppButtonKind.secondary,
+                  onPressed: onReset,
+                  label: 'Сбросить фильтры')
             else if (isOwner)
-              FilledButton(
-                  onPressed: onCreate, child: const Text('Создать партию')),
+              AppButton(onPressed: onCreate, label: 'Создать партию'),
           ],
         ),
       ),
@@ -152,7 +188,9 @@ class _Empty extends StatelessWidget {
 }
 
 class _List extends ConsumerWidget {
-  const _List({required this.state, required this.isOwner});
+  const _List(
+      {required this.state, required this.isOwner, required this.header});
+  final Widget header;
   final CatalogState state;
   final bool isOwner;
 
@@ -168,8 +206,14 @@ class _List extends ConsumerWidget {
       return RefreshIndicator(
         onRefresh: ctrl.reload,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 88),
+          // Bottom: the floating nav inset (from the shell) plus a margin.
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.xs,
+              AppSpacing.lg,
+              MediaQuery.paddingOf(context).bottom + AppSpacing.lg),
           children: [
+            header,
             for (final row in rows)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,13 +234,14 @@ class _List extends ConsumerWidget {
             if (state.hasMore)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: OutlinedButton(
+                child: AppButton(
+                  kind: AppButtonKind.secondary,
                   onPressed: state.loadingMore ? null : ctrl.loadMore,
-                  child: Text(state.loadingMore
+                  label: state.loadingMore
                       ? 'Загрузка…'
                       : state.loadMoreError != null
                           ? 'Повторить'
-                          : 'Показать ещё'),
+                          : 'Показать ещё',
                 ),
               ),
           ],
@@ -211,61 +256,11 @@ class _MaterialCard extends StatelessWidget {
   final MaterialItem item;
 
   @override
-  Widget build(BuildContext context) {
-    final type = item.materialType?.label;
-    final cond = item.condition?.label;
-    final typeLine =
-        [if (type != null) type, if (cond != null) cond].join(' · ');
-    final massLine = item.status == MaterialStatus.draft
-        ? 'Масса: ${item.balance?.totalKg ?? item.availableKg} кг'
-        : 'Свободно: ${item.availableKg} кг';
-    final price = item.pricePerKg == null
-        ? 'Цена не указана'
-        : '${item.pricePerKg} KGS/кг';
-    final city = item.city ?? 'Город не указан';
-    return Card(
-      child: Semantics(
-        button: true,
-        label:
-            'Партия ${item.name}, ${item.status.label}, свободно ${item.availableKg} кг, $city',
-        excludeSemantics: true,
-        child: InkWell(
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: MaterialPhotoCard(
+          item: item,
           onTap: () => context.push('/materials/${item.id}'),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                MaterialPhoto(
-                  materialId: item.id,
-                  imageId: item.images.isEmpty ? null : item.images.first.id,
-                  label: 'Фото партии ${item.name}',
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      MaterialStatusChip(status: item.status),
-                      if (typeLine.isNotEmpty) Text(typeLine),
-                      Text(massLine),
-                      Text(city),
-                      Text(price),
-                      if (item.organizationName != null)
-                        Text(item.organizationName!),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
-      ),
-    );
-  }
+      );
 }

@@ -26,7 +26,7 @@ void main() {
       ..serverItem = item;
     await _app(tester, repo);
 
-    await tester.tap(find.text('Партии'));
+    await tester.tap(find.text('Партии').first);
     await tester.pumpAndSettle();
     expect(find.text('Мои партии'), findsOneWidget);
 
@@ -43,7 +43,7 @@ void main() {
   testWidgets('catalog -> Создать партию opens the form', (tester) async {
     final repo = RecordingRepo();
     await _app(tester, repo);
-    await tester.tap(find.text('Партии'));
+    await tester.tap(find.text('Партии').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Создать партию').first);
     await tester.pumpAndSettle();

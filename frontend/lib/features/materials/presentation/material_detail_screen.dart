@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/format/mass_format.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/session/session.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../../auth/models/auth_models.dart';
 import '../models/material_enums.dart';
@@ -24,8 +27,17 @@ class MaterialDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Партия')),
       body: async.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(semanticsLabel: 'Загрузка…'),
+        loading: () => const SingleChildScrollView(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: AppContentColumn(
+            child: Column(
+              children: [
+                AppSkeleton(height: 200),
+                SizedBox(height: AppSpacing.lg),
+                AppSkeletonList(count: 2),
+              ],
+            ),
+          ),
         ),
         error: (e, _) {
           final err = e is ApiException ? e : ApiException.network();
@@ -41,10 +53,11 @@ class MaterialDetailScreen extends ConsumerWidget {
                       Text(isBuyer && err.statusCode == 404
                           ? 'Партия больше недоступна'
                           : lifecycleErrorText(err)),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
+                      const SizedBox(height: AppSpacing.md),
+                      AppButton(
+                        kind: AppButtonKind.secondary,
                         onPressed: () => context.go('/'),
-                        child: const Text('На главную'),
+                        label: 'На главную',
                       ),
                     ],
                   )
@@ -79,49 +92,63 @@ class _Body extends ConsumerWidget {
             item.isOwnerView;
     final left = [
       _Header(item: item),
-      const SizedBox(height: 12),
+      const SizedBox(height: AppSpacing.md),
       _Photos(item: item),
-      if (isOwner) ...[const SizedBox(height: 12), _Actions(item: item)],
+      if (isOwner) ...[
+        const SizedBox(height: AppSpacing.md),
+        _Actions(item: item)
+      ],
     ];
     final right = [
       _Characteristics(item: item, isOwner: isOwner),
-      const SizedBox(height: 12),
+      const SizedBox(height: AppSpacing.md),
       _Balance(item: item),
       if (isOwner) ...[
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _AnalysisRow(item: item),
       ],
     ];
-    return LayoutBuilder(builder: (context, c) {
-      final wide = c.maxWidth >= 840;
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: wide ? 1100 : 600),
-            child: wide
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: left)),
-                      const SizedBox(width: 24),
-                      Expanded(
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: right)),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [...left, const SizedBox(height: 12), ...right],
-                  ),
-          ),
+    final primary = isOwner ? _primaryAction(ref, item) : null;
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(builder: (context, c) {
+            final wide = c.maxWidth >= 840;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
+              child: AppContentColumn(
+                maxWidth: wide ? 1100 : AppSpacing.contentMax,
+                child: wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: left)),
+                          const SizedBox(width: AppSpacing.xl),
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: right)),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ...left,
+                          const SizedBox(height: AppSpacing.md),
+                          ...right
+                        ],
+                      ),
+              ),
+            );
+          }),
         ),
-      );
-    });
+        if (primary != null) AppBottomBar(child: primary),
+      ],
+    );
   }
 }
 
@@ -134,11 +161,13 @@ class _Header extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(item.name, style: Theme.of(context).textTheme.headlineSmall),
+        Text(item.name, style: AppTypography.headline),
         const SizedBox(height: 8),
         MaterialStatusChip(status: item.status),
         const SizedBox(height: 4),
-        Text(statusHelper(item.status)),
+        Text(statusHelper(item.status),
+            style: AppTypography.bodySmall
+                .copyWith(color: AppColors.textSecondary)),
       ],
     );
   }
@@ -207,10 +236,11 @@ class _Characteristics extends StatelessWidget {
       ),
       if (item.organizationName != null) ('Продавец', item.organizationName!),
     ];
-    return Column(
+    return AppCard(
+        child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Характеристики', style: Theme.of(context).textTheme.titleMedium),
+        Text('Характеристики', style: AppTypography.title),
         if (isOwner)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -223,12 +253,13 @@ class _Characteristics extends StatelessWidget {
             child: Text.rich(TextSpan(children: [
               TextSpan(
                   text: '${r.$1}: ',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                  style: AppTypography.label
+                      .copyWith(color: AppColors.textSecondary)),
               TextSpan(text: r.$2),
             ])),
           ),
       ],
-    );
+    ));
   }
 }
 
@@ -240,26 +271,29 @@ class _Balance extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = item.balance;
     // Values come from the server as-is; the client never sums masses.
-    final rows = b == null
-        ? [('Свободно', item.availableKg)]
-        : [
-            ('Всего', b.totalKg),
-            ('Свободно', b.availableKg),
-            ('Удержано', b.heldKg),
-            ('Передано', b.transferredKg),
-            ('Использовано внутри', b.internallyUsedKg),
-          ];
-    return Column(
+    return AppCard(
+        child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Масса, кг', style: Theme.of(context).textTheme.titleMedium),
-        for (final r in rows)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text('${r.$1}: ${r.$2} кг'),
+        Text('Масса, кг', style: AppTypography.title),
+        const SizedBox(height: AppSpacing.md),
+        if (b == null)
+          Text('Свободно: ${formatKg(item.availableKg)}',
+              style: AppTypography.headline)
+        else ...[
+          AppStatTriplet(
+            freeKg: formatDecimal(b.availableKg),
+            reservedKg: formatDecimal(b.heldKg),
+            transferredKg: formatDecimal(b.transferredKg),
+            totalKg: formatDecimal(b.totalKg),
           ),
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text('Использовано внутри: ${formatKg(b.internallyUsedKg)}'),
+          ),
+        ],
       ],
-    );
+    ));
   }
 }
 
@@ -273,48 +307,93 @@ class _AnalysisRow extends StatelessWidget {
     final editable = item.status == MaterialStatus.draft ||
         item.status == MaterialStatus.available ||
         item.status == MaterialStatus.partiallyAllocated;
-    return Column(
+    // No empty section: nothing to show for a batch that cannot be analysed.
+    if (item.images.isNotEmpty && !editable) return const SizedBox.shrink();
+    return AppCard(
+        child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Анализ ИИ', style: Theme.of(context).textTheme.titleMedium),
+        Text('Анализ ИИ', style: AppTypography.title),
         const SizedBox(height: 4),
         if (item.images.isEmpty)
           const Text('Для анализа нужно фото.')
         else if (editable)
-          OutlinedButton(
+          AppButton(
+            kind: AppButtonKind.secondary,
             onPressed: () => context.push('/materials/${item.id}/analysis'),
-            child: const Text('Проанализировать фото'),
+            label: 'Проанализировать фото',
           ),
       ],
-    );
+    ));
   }
 }
 
+bool _canEdit(MaterialItem item) =>
+    item.status == MaterialStatus.draft ||
+    item.status == MaterialStatus.available ||
+    item.status == MaterialStatus.partiallyAllocated;
+
+Future<bool> _ask(
+    BuildContext context, String title, String text, String action,
+    {bool destructive = false}) {
+  return AppConfirmDialog.show(
+    context,
+    title: title,
+    message: text,
+    confirmLabel: action,
+    destructive: destructive,
+  );
+}
+
+/// The single next-step action, pinned in the bottom bar (null: no bar).
+/// Either confirm characteristics or, once nothing is missing, publish.
+Widget? _primaryAction(WidgetRef ref, MaterialItem item) {
+  final confirm = ref.watch(confirmMaterialProvider);
+  final life = ref.watch(lifecycleProvider);
+  final busy = confirm.busy || life.busy;
+  final isDraft = item.status == MaterialStatus.draft;
+  final needsConfirm = !item.isConfirmationCurrent && _canEdit(item);
+  if (needsConfirm) {
+    return Builder(
+      builder: (_) => AppButton(
+        label: 'Подтвердить характеристики',
+        loadingLabel: 'Отправка…',
+        loading: confirm.busy,
+        onPressed: busy
+            ? null
+            : () => ref.read(confirmMaterialProvider.notifier).confirm(item),
+      ),
+    );
+  }
+  if (isDraft && missingPublishFields(item).isEmpty) {
+    return Builder(
+      builder: (context) => AppButton(
+        label: 'Опубликовать',
+        loadingLabel: 'Публикация…',
+        loading: life.busy && life.lastAction == LifecycleAction.publish,
+        onPressed: busy
+            ? null
+            : () async {
+                final ok = await _ask(
+                  context,
+                  'Опубликовать партию?',
+                  'Партия станет видна покупателям. Масса и характеристики будут ограничены в изменении при активных заявках.',
+                  'Опубликовать',
+                );
+                if (ok) {
+                  await ref.read(lifecycleProvider.notifier).publish(item);
+                }
+              },
+      ),
+    );
+  }
+  return null;
+}
+
+/// Everything except the primary action: errors, checklist, edit, archive.
 class _Actions extends ConsumerWidget {
   const _Actions({required this.item});
   final MaterialItem item;
-
-  Future<bool> _ask(
-      BuildContext context, String title, String text, String action) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(text),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(action),
-          ),
-        ],
-      ),
-    );
-    return ok == true;
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -322,9 +401,7 @@ class _Actions extends ConsumerWidget {
     final life = ref.watch(lifecycleProvider);
     final busy = confirm.busy || life.busy;
     final isDraft = item.status == MaterialStatus.draft;
-    final canEdit = isDraft ||
-        item.status == MaterialStatus.available ||
-        item.status == MaterialStatus.partiallyAllocated;
+    final canEdit = _canEdit(item);
     final needsConfirm = !item.isConfirmationCurrent && canEdit;
     final missing = missingPublishFields(item);
     void refresh() {
@@ -342,7 +419,7 @@ class _Actions extends ConsumerWidget {
             onRetry: () =>
                 ref.read(confirmMaterialProvider.notifier).confirm(item),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
         ],
         if (life.error != null) ...[
           LifecycleErrorView(
@@ -355,50 +432,21 @@ class _Actions extends ConsumerWidget {
                   : n.publish(item);
             },
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        // The checklist comes before the action it explains.
+        if (isDraft && missing.isNotEmpty) ...[
+          _Checklist(missing: missing),
+          const SizedBox(height: AppSpacing.md),
         ],
         if (needsConfirm) ...[
           const Text(
               'Вы подтверждаете характеристики партии. После подтверждения они используются в подборе и плане.'),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: busy
-                ? null
-                : () =>
-                    ref.read(confirmMaterialProvider.notifier).confirm(item),
-            child:
-                Text(confirm.busy ? 'Отправка…' : 'Подтвердить характеристики'),
-          ),
-          const SizedBox(height: 8),
-        ],
-        if (isDraft) ...[
-          if (missing.isNotEmpty) _Checklist(missing: missing),
-          if (missing.isEmpty)
-            FilledButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final ok = await _ask(
-                        context,
-                        'Опубликовать партию?',
-                        'Партия станет видна покупателям. Масса и характеристики будут ограничены в изменении при активных заявках.',
-                        'Опубликовать',
-                      );
-                      if (ok) {
-                        await ref
-                            .read(lifecycleProvider.notifier)
-                            .publish(item);
-                      }
-                    },
-              child: Text(
-                  life.busy && life.lastAction == LifecycleAction.publish
-                      ? 'Публикация…'
-                      : 'Опубликовать'),
-            ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
         ],
         if (canEdit)
-          OutlinedButton(
+          AppButton(
+            kind: AppButtonKind.secondary,
             onPressed: busy
                 ? null
                 : () async {
@@ -408,15 +456,16 @@ class _Actions extends ConsumerWidget {
                       ref.invalidate(materialDetailProvider(item.id));
                     }
                   },
-            child: const Text('Изменить'),
+            label: 'Изменить',
           ),
         // Offered only for a published material the server reports as fully
         // free; the server still refuses with ACTIVE_OBLIGATIONS otherwise.
         if (item.status == MaterialStatus.available ||
             item.status == MaterialStatus.partiallyAllocated ||
             item.status == MaterialStatus.completed) ...[
-          const SizedBox(height: 8),
-          OutlinedButton(
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(
+            kind: AppButtonKind.secondary,
             onPressed: busy
                 ? null
                 : () async {
@@ -425,14 +474,15 @@ class _Actions extends ConsumerWidget {
                       'Архивировать партию?',
                       'Партия будет скрыта от покупателей.',
                       'Архивировать',
+                      destructive: true,
                     );
                     if (ok) {
                       await ref.read(lifecycleProvider.notifier).archive(item);
                     }
                   },
-            child: Text(life.busy && life.lastAction == LifecycleAction.archive
-                ? 'Архивация…'
-                : 'Архивировать'),
+            label: 'Архивировать',
+            loadingLabel: 'Архивация…',
+            loading: life.busy && life.lastAction == LifecycleAction.archive,
           ),
         ],
       ],
@@ -446,25 +496,26 @@ class _Checklist extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return AppCard(
+        child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Чтобы опубликовать, осталось:',
-            style: Theme.of(context).textTheme.titleSmall),
+        Text('Чтобы опубликовать, осталось:', style: AppTypography.title),
         for (final t in publishMissingLabels(missing))
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.radio_button_unchecked, size: 16),
+                const Icon(Icons.radio_button_unchecked,
+                    size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: 6),
                 Expanded(child: Text(t)),
               ],
             ),
           ),
       ],
-    );
+    ));
   }
 }
 
@@ -505,9 +556,10 @@ class LifecycleErrorView extends StatelessWidget {
         if (conflict || error.code == 'PRECONDITION_FAILED')
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton(
+            child: AppButton(
+              kind: AppButtonKind.text,
               onPressed: onRefresh,
-              child: const Text('Обновить данные'),
+              label: 'Обновить данные',
             ),
           ),
       ],

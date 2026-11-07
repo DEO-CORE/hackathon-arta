@@ -7,13 +7,14 @@ import 'package:arta/features/materials/models/material_models.dart';
 import 'package:arta/features/materials/presentation/catalog_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:arta/core/ui/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/material_fakes.dart';
 
 Future<void> _pump(WidgetTester tester, RecordingRepo repo,
     {UserRole role = UserRole.enterprise, bool settle = true}) async {
-  tester.view.physicalSize = const Size(400, 9000);
+  tester.view.physicalSize = const Size(400, 30000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final c = makeContainer(repo, role: role);
@@ -27,12 +28,13 @@ Future<void> _pump(WidgetTester tester, RecordingRepo repo,
 }
 
 void main() {
-  testWidgets('loading state shows a progress indicator, no list or empty text',
+  testWidgets('loading state shows a skeleton list, no list or empty text',
       (tester) async {
     final repo = RecordingRepo()..listGate = Completer();
     await _pump(tester, repo, settle: false);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(AppSkeletonList), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('Партий пока нет. Добавьте первую.'), findsNothing);
     expect(find.text('Повторить'), findsNothing);
   });
@@ -73,14 +75,14 @@ void main() {
     expect(find.text('Повторить'), findsNothing);
   });
 
-  testWidgets('success: card shows decimals as received with units',
+  testWidgets('success: card shows formatted mass and the price with units',
       (tester) async {
     final repo = RecordingRepo()
       ..items = [fakeItem('a')]
       ..total = 1;
     await _pump(tester, repo);
-    expect(find.text('Масса: 10.000 кг'), findsOneWidget);
-    expect(find.text('45.00 KGS/кг'), findsOneWidget);
+    expect(find.text('Масса: 10\u00A0кг'), findsOneWidget);
+    expect(find.textContaining('45.00 KGS/кг'), findsOneWidget);
     expect(find.text('Черновик'), findsWidgets);
   });
 
@@ -182,7 +184,7 @@ void main() {
       ..total = 1;
     await _pump(tester, repo);
     expect(find.text('Статус неизвестен'), findsWidgets);
-    expect(find.text('Город не указан'), findsOneWidget);
+    expect(find.textContaining('Город не указан'), findsOneWidget);
   });
 
   // RED (bug QA-P2-01): MaterialStatusChip overflows its row on a 400 px

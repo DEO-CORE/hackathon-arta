@@ -3,6 +3,8 @@ import 'dart:io' show File;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_skeleton.dart';
 import '../providers/material_providers.dart';
 
 /// Shows a photo only through the short-lived signed URL the API returns.
@@ -31,7 +33,8 @@ class MaterialPhoto extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.image_not_supported),
+              const Icon(Icons.image_not_supported,
+                  color: AppColors.textSecondary),
               if (size >= 80) Text(text, style: const TextStyle(fontSize: 12)),
             ],
           ),
@@ -43,12 +46,9 @@ class MaterialPhoto extends ConsumerWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: url.when(
-        loading: () => SizedBox(
-          width: size,
-          height: size,
-          child: const Center(
-              child:
-                  CircularProgressIndicator(semanticsLabel: 'Загрузка фото')),
+        loading: () => Semantics(
+          label: 'Загрузка фото',
+          child: AppSkeleton(width: size, height: size),
         ),
         error: (_, __) => placeholder('Фото недоступно'),
         data: (u) => Semantics(

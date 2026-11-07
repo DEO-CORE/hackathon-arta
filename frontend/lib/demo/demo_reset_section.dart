@@ -1,3 +1,5 @@
+import 'package:arta/core/ui/app_button.dart';
+import 'package:arta/core/ui/ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -100,21 +102,20 @@ class _ResetDialogState extends ConsumerState<_ResetDialog> {
         ],
       ),
       actions: [
-        TextButton(
+        AppButton(
+          label: 'Отмена',
+          kind: AppButtonKind.text,
           autofocus: true,
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError),
+        AppButton(
+          kind: AppButtonKind.destructive,
           onPressed: _busy ? null : _reset,
-          child: Text(_busy
+          label: _busy
               ? 'Сброс…'
               : _failed
                   ? 'Повторить'
-                  : 'Сбросить'),
+                  : 'Сбросить',
         ),
       ],
     );

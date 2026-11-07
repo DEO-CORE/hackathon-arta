@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../providers/material_providers.dart';
 import 'material_form_fields.dart';
@@ -60,74 +62,82 @@ class _MaterialCreateScreenState extends ConsumerState<MaterialCreateScreen> {
     final locked = s.saving || s.created != null;
     final fe = s.error?.fieldErrors ?? const <String, String>{};
 
-    final form = Form(
-      key: _formKey,
-      child: MaterialFormFields(
-        model: _model,
-        enabled: !locked,
-        fieldErrors: fe,
+    final form = AppCard(
+      child: Form(
+        key: _formKey,
+        child: MaterialFormFields(
+          model: _model,
+          enabled: !locked,
+          fieldErrors: fe,
+        ),
       ),
     );
-    final photos = _PhotosSection(onPick: _pick);
+    final photos = AppCard(child: _PhotosSection(onPick: _pick));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Новая партия')),
+      bottomNavigationBar: AppBottomBar(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppButton(
+              onPressed: _submit,
+              loading: s.saving,
+              loadingLabel: 'Сохранение…',
+              label: s.created != null
+                  ? 'Повторить загрузку фото'
+                  : 'Сохранить черновик',
+            ),
+            if (s.created != null && !s.saving && !s.allPhotosDone) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                kind: AppButtonKind.secondary,
+                onPressed: () =>
+                    context.pushReplacement('/materials/${s.created!.id}'),
+                label: 'Открыть партию без этих фото',
+              ),
+            ],
+          ],
+        ),
+      ),
       body: LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 840;
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: wide ? 1100 : 600),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (s.error != null) ...[
-                    ErrorBanner(error: s.error!),
-                    if (fe.isNotEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 4),
-                        child: Text('Проверьте поля формы.'),
-                      ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (s.created != null && !s.allPhotosDone && !s.saving) ...[
-                    const _PartialBanner(),
-                    const SizedBox(height: 12),
-                  ],
-                  wide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: form),
-                            const SizedBox(width: 24),
-                            Expanded(child: photos),
-                          ],
-                        )
-                      : Column(
-                          // Stretch keeps the photo block on the same left
-                          // edge as the form fields (DEV-03).
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [form, const SizedBox(height: 16), photos]),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: s.saving ? null : _submit,
-                    child: Text(s.saving
-                        ? 'Сохранение…'
-                        : s.created != null
-                            ? 'Повторить загрузку фото'
-                            : 'Сохранить черновик'),
-                  ),
-                  if (s.created != null && !s.saving && !s.allPhotosDone) ...[
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed: () => context
-                          .pushReplacement('/materials/${s.created!.id}'),
-                      child: const Text('Открыть партию без этих фото'),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: AppContentColumn(
+            maxWidth: wide ? 1100 : AppSpacing.contentMax,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (s.error != null) ...[
+                  ErrorBanner(error: s.error!),
+                  if (fe.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text('Проверьте поля формы.'),
                     ),
-                  ],
+                  const SizedBox(height: AppSpacing.md),
                 ],
-              ),
+                if (s.created != null && !s.allPhotosDone && !s.saving) ...[
+                  const _PartialBanner(),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: form),
+                          const SizedBox(width: 24),
+                          Expanded(child: photos),
+                        ],
+                      )
+                    : Column(
+                        // Stretch keeps the photo block on the same left
+                        // edge as the form fields (DEV-03).
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [form, const SizedBox(height: 16), photos]),
+              ],
             ),
           ),
         );
@@ -186,10 +196,11 @@ class _PhotosSection extends ConsumerWidget {
         const SizedBox(height: 8),
         Align(
             alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
+            child: AppButton(
+              kind: AppButtonKind.secondary,
               onPressed: locked || s.photos.length >= 5 ? null : onPick,
-              icon: const Icon(Icons.add_a_photo),
-              label: const Text('Добавить фото'),
+              icon: Icons.add_a_photo,
+              label: 'Добавить фото',
             )),
       ],
     );

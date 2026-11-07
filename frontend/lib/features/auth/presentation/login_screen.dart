@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/session/session.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../../../demo/demo_auth_repository.dart';
 import '../providers/auth_providers.dart';
@@ -51,12 +53,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final expired = ref.watch(sessionProvider.select((s) => s.expired));
     final fieldErrors = form.error?.fieldErrors ?? const <String, String>{};
     return Scaffold(
-      appBar: AppBar(title: const Text('ARTA')),
-      body: Center(
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.xxl, AppSpacing.lg, AppSpacing.xl),
+          child: AppContentColumn(
+            maxWidth: 420,
             child: Form(
               key: _formKey,
               autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -67,49 +69,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Вход',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
+                    const AppBrandBlock(),
+                    const SizedBox(height: AppSpacing.xl),
+                    Text('Вход', style: AppTypography.headline),
+                    const SizedBox(height: AppSpacing.lg),
                     if (expired && form.error == null) ...[
                       const Text('Сессия истекла. Войдите снова.'),
-                      const SizedBox(height: 12),
-                    ],
-                    if (demo) ...[
-                      Text('Демо-вход: $demoLoginEmail / $demoLoginPassword',
-                          key: const Key('demoCredentials')),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton(
-                          onPressed: form.submitting
-                              ? null
-                              : () {
-                                  _email.text = demoLoginEmail;
-                                  _password.text = demoLoginPassword;
-                                },
-                          child: const Text('Заполнить'),
-                        ),
-                      ),
+                      const SizedBox(height: AppSpacing.md),
                     ],
                     if (form.error != null) ...[
                       ErrorBanner(error: form.error!),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: AppSpacing.md),
                     ],
-                    TextFormField(
+                    AppTextField(
+                      label: 'Email',
                       controller: _email,
                       enabled: !form.submitting,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: demo ? null : const [AutofillHints.email],
                       textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        errorText: fieldErrors['email'],
-                      ),
+                      errorText: fieldErrors['email'],
                       validator: validateEmail,
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
+                    const SizedBox(height: AppSpacing.lg),
+                    AppTextField(
+                      label: 'Пароль',
                       controller: _password,
                       enabled: !form.submitting,
                       obscureText: !_showPassword,
@@ -117,50 +101,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           demo ? null : const [AutofillHints.password],
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _submit(),
-                      decoration: InputDecoration(
-                        labelText: 'Пароль',
-                        errorText: fieldErrors['password'],
-                        suffixIcon: IconButton(
-                          tooltip: _showPassword
-                              ? 'Скрыть пароль'
-                              : 'Показать пароль',
-                          icon: Icon(_showPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility),
-                          onPressed: () =>
-                              setState(() => _showPassword = !_showPassword),
-                        ),
+                      errorText: fieldErrors['password'],
+                      suffix: IconButton(
+                        tooltip:
+                            _showPassword ? 'Скрыть пароль' : 'Показать пароль',
+                        icon: Icon(_showPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility),
+                        onPressed: () =>
+                            setState(() => _showPassword = !_showPassword),
                       ),
                       validator: (v) =>
                           (v == null || v.isEmpty) ? 'Укажите пароль.' : null,
                     ),
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: form.submitting ? null : _submit,
-                      child: form.submitting
-                          ? const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    semanticsLabel: 'Отправка',
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Text('Отправка…'),
-                              ],
-                            )
-                          : const Text('Войти'),
+                    const SizedBox(height: AppSpacing.xl),
+                    AppButton(
+                      label: 'Войти',
+                      loading: form.submitting,
+                      loadingLabel: 'Отправка…',
+                      onPressed: _submit,
                     ),
-                    TextButton(
+                    const SizedBox(height: AppSpacing.sm),
+                    AppButton(
+                      label: 'Нет аккаунта? Зарегистрироваться',
+                      kind: AppButtonKind.text,
                       onPressed: form.submitting
                           ? null
                           : () => context.go('/register'),
-                      child: const Text('Нет аккаунта? Зарегистрироваться'),
                     ),
+                    if (demo) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      _DemoLoginBlock(
+                        enabled: !form.submitting,
+                        onFill: () {
+                          _email.text = demoLoginEmail;
+                          _password.text = demoLoginPassword;
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -170,4 +148,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
+}
+
+class _DemoLoginBlock extends StatelessWidget {
+  const _DemoLoginBlock({required this.enabled, required this.onFill});
+  final bool enabled;
+  final VoidCallback onFill;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        child: Row(
+          children: [
+            const Icon(Icons.science, color: AppColors.textSecondary),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text('Демо-вход: $demoLoginEmail / $demoLoginPassword',
+                  key: const Key('demoCredentials'),
+                  style: AppTypography.bodySmall),
+            ),
+            AppButton(
+              label: 'Заполнить',
+              kind: AppButtonKind.text,
+              onPressed: enabled ? onFill : null,
+            ),
+          ],
+        ),
+      );
 }

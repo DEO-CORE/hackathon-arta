@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/format/mass_format.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/session/session.dart';
@@ -35,8 +38,10 @@ class AnalysisScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Анализ ИИ')),
       body: material.when(
-        loading: () => const Center(
-            child: CircularProgressIndicator(semanticsLabel: 'Загрузка…')),
+        loading: () => const SingleChildScrollView(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: AppSkeletonList(count: 3),
+        ),
         error: (e, _) => Padding(
           padding: const EdgeInsets.all(16),
           child: ErrorBanner(
@@ -72,8 +77,10 @@ class _Body extends ConsumerWidget {
     final a = s.analysis;
     final simulation = demoBuild || (a?.isSimulation ?? false);
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Center(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
+      child: Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: Column(
@@ -114,7 +121,7 @@ class _Plate extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: simulation ? const Color(0xFFEFE6DE) : const Color(0xFFE6E9F8),
+          color: simulation ? AppColors.neutralBg : AppColors.suggestedBg,
           border: Border.all(color: scheme.outline),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -122,16 +129,13 @@ class _Plate extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(simulation ? Icons.science : Icons.auto_awesome,
-                color: simulation
-                    ? const Color(0xFF5B5048)
-                    : const Color(0xFF3B4BA0)),
+                color: simulation ? AppColors.neutral : AppColors.suggested),
             const SizedBox(width: 8),
             Expanded(
               child: DefaultTextStyle.merge(
                 style: TextStyle(
-                    color: simulation
-                        ? const Color(0xFF5B5048)
-                        : const Color(0xFF3B4BA0)),
+                    color:
+                        simulation ? AppColors.neutral : AppColors.suggested),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -176,9 +180,9 @@ class _AnalysisPart extends ConsumerWidget {
         if (material.images.isEmpty) {
           return const Text('Для анализа нужно фото.');
         }
-        return FilledButton(
+        return AppButton(
           onPressed: ctrl.start,
-          child: const Text('Проанализировать фото'),
+          label: 'Проанализировать фото',
         );
       case AnalysisPhase.starting:
       case AnalysisPhase.polling:
@@ -203,9 +207,10 @@ class _AnalysisPart extends ConsumerWidget {
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
+              child: AppButton(
+                kind: AppButtonKind.text,
                 onPressed: () => _close(context),
-                child: const Text('Закрыть'),
+                label: 'Закрыть',
               ),
             ),
           ],
@@ -216,8 +221,10 @@ class _AnalysisPart extends ConsumerWidget {
           children: [
             const Text('Анализ занимает дольше обычного'),
             const SizedBox(height: 8),
-            OutlinedButton(
-                onPressed: ctrl.resume, child: const Text('Проверить снова')),
+            AppButton(
+                kind: AppButtonKind.secondary,
+                onPressed: ctrl.resume,
+                label: 'Проверить снова'),
           ],
         );
       case AnalysisPhase.failed:
@@ -252,8 +259,10 @@ class _Stale extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         if (canRun)
-          OutlinedButton(
-              onPressed: onRetry, child: const Text('Запустить заново')),
+          AppButton(
+              kind: AppButtonKind.secondary,
+              onPressed: onRetry,
+              label: 'Запустить заново'),
       ],
     );
   }
@@ -334,9 +343,9 @@ class _Failed extends StatelessWidget {
           const SizedBox(height: 8),
         ],
         if (retryOk && canRun)
-          FilledButton(
+          AppButton(
             onPressed: waiting ? null : ctrl.start,
-            child: Text(interrupted ? 'Запустить заново' : 'Повторить'),
+            label: interrupted ? 'Запустить заново' : 'Повторить',
           ),
         const SizedBox(height: 4),
         const Text('Вы можете подтвердить характеристики вручную.'),
@@ -527,7 +536,7 @@ class _HumanBlock extends ConsumerWidget {
     final rows = <(String, String)>[
       ('Тип', m.materialType?.label ?? 'Не указан'),
       ('Состояние', m.condition?.label ?? 'Не указано'),
-      ('Масса', '${m.balance?.totalKg ?? m.availableKg} кг'),
+      ('Масса', formatKg(m.balance?.totalKg ?? m.availableKg)),
       ('Город', m.city ?? 'Не указан'),
       ('Состав', m.composition ?? 'Неизвестно'),
     ];
@@ -569,12 +578,13 @@ class _HumanBlock extends ConsumerWidget {
           const Text(
               'Вы подтверждаете характеристики партии. После подтверждения они используются в подборе и плане.'),
           const SizedBox(height: 8),
-          FilledButton(
+          AppButton(
             onPressed: confirm.busy
                 ? null
                 : () => ref.read(confirmMaterialProvider.notifier).confirm(m),
-            child:
-                Text(confirm.busy ? 'Отправка…' : 'Подтвердить характеристики'),
+            loading: confirm.busy,
+            loadingLabel: 'Отправка…',
+            label: 'Подтвердить характеристики',
           ),
         ],
       ],

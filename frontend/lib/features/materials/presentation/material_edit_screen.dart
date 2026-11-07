@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../models/material_models.dart';
 import '../providers/material_providers.dart';
@@ -19,8 +21,9 @@ class MaterialEditScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Изменить партию')),
       body: async.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(semanticsLabel: 'Загрузка…'),
+        loading: () => const SingleChildScrollView(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: AppSkeletonList(count: 3),
         ),
         error: (e, _) => Padding(
           padding: const EdgeInsets.all(16),
@@ -85,63 +88,73 @@ class _EditFormState extends ConsumerState<EditForm> {
             ?.whereType<String>()
             .toList() ??
         const <String>[];
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (s.isVersionConflict) ...[
-                ErrorBanner(
-                  error: ApiException(
-                    code: 'VERSION_CONFLICT',
-                    message: 'Данные изменились, пока вы их редактировали'
-                        '${s.currentServerVersion == null ? '' : ' (версия на сервере: ${s.currentServerVersion})'}. '
-                        'Обновите данные и повторите изменения. Ваши значения в форме сохранены.',
-                    statusCode: 409,
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: AppContentColumn(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (s.isVersionConflict) ...[
+                    ErrorBanner(
+                      error: ApiException(
+                        code: 'VERSION_CONFLICT',
+                        message: 'Данные изменились, пока вы их редактировали'
+                            '${s.currentServerVersion == null ? '' : ' (версия на сервере: ${s.currentServerVersion})'}. '
+                            'Обновите данные и повторите изменения. Ваши значения в форме сохранены.',
+                        statusCode: 409,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    AppButton(
+                      kind: AppButtonKind.secondary,
+                      onPressed: busy
+                          ? null
+                          : () => ref.read(provider.notifier).refresh(),
+                      label: s.refreshing ? 'Обновление…' : 'Обновить данные',
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ] else if (s.isActiveObligations) ...[
+                    ErrorBanner(
+                      error: ApiException(
+                        code: 'ACTIVE_OBLIGATIONS',
+                        message: 'Нельзя изменить: есть активные заявки.'
+                            '${blocked.isEmpty ? '' : ' Поля: ${blocked.join(', ')}.'}',
+                        statusCode: 409,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ] else if (s.error != null) ...[
+                    ErrorBanner(error: s.error!),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  AppCard(
+                    child: Form(
+                      key: _formKey,
+                      child: MaterialFormFields(
+                        model: _model,
+                        enabled: !busy,
+                        fieldErrors: fe,
+                        requireAll: false,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed:
-                      busy ? null : () => ref.read(provider.notifier).refresh(),
-                  child: Text(s.refreshing ? 'Обновление…' : 'Обновить данные'),
-                ),
-                const SizedBox(height: 12),
-              ] else if (s.isActiveObligations) ...[
-                ErrorBanner(
-                  error: ApiException(
-                    code: 'ACTIVE_OBLIGATIONS',
-                    message: 'Нельзя изменить: есть активные заявки.'
-                        '${blocked.isEmpty ? '' : ' Поля: ${blocked.join(', ')}.'}',
-                    statusCode: 409,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ] else if (s.error != null) ...[
-                ErrorBanner(error: s.error!),
-                const SizedBox(height: 12),
-              ],
-              Form(
-                key: _formKey,
-                child: MaterialFormFields(
-                  model: _model,
-                  enabled: !busy,
-                  fieldErrors: fe,
-                  requireAll: false,
-                ),
+                ],
               ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: busy ? null : _save,
-                child: Text(s.saving ? 'Сохранение…' : 'Сохранить'),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+        AppBottomBar(
+          child: AppButton(
+            onPressed: busy ? null : _save,
+            loading: s.saving,
+            loadingLabel: 'Сохранение…',
+            label: 'Сохранить',
+          ),
+        ),
+      ],
     );
   }
 }

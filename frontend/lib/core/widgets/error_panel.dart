@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../network/api_exception.dart';
+import '../ui/app_button.dart';
 
 /// Shows the safe envelope message and, for unexpected errors, the request id.
 class ErrorBanner extends StatelessWidget {
@@ -53,9 +54,10 @@ class ErrorBanner extends StatelessWidget {
             if (onRetry != null)
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(
+                child: AppButton(
+                  label: 'Повторить',
+                  kind: AppButtonKind.text,
                   onPressed: onRetry,
-                  child: const Text('Повторить'),
                 ),
               ),
           ],

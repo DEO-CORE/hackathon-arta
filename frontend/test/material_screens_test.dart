@@ -173,7 +173,7 @@ void main() {
         ..items = [for (var i = 0; i < 25; i++) item('$i', name: 'Партия $i')]
         ..total = 25;
       await pump(tester, repo, const CatalogScreen(),
-          size: const Size(400, 9000));
+          size: const Size(400, 30000));
       expect(find.text('Партия 19'), findsOneWidget);
       expect(find.text('Партия 20'), findsNothing);
       await tester.ensureVisible(find.text('Показать ещё'));

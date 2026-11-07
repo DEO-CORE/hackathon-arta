@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/ui.dart';
 import '../../../core/widgets/error_panel.dart';
 import '../models/auth_models.dart';
 import '../providers/auth_providers.dart';
@@ -63,11 +65,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final fe = form.error?.fieldErrors ?? const <String, String>{};
     return Scaffold(
       appBar: AppBar(title: const Text('Регистрация')),
-      body: Center(
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: AppContentColumn(
+            maxWidth: 420,
             child: Form(
               autovalidateMode: AutovalidateMode.onUserInteraction,
               key: _formKey,
@@ -76,7 +78,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 children: [
                   if (form.error != null) ...[
                     ErrorBanner(error: form.error!),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.lg),
                   ],
                   DropdownButtonFormField<UserRole>(
                     initialValue: _role,
@@ -98,54 +100,46 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               _activity = _activities.first;
                             }),
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextField(
                     controller: _email,
                     enabled: !busy,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      errorText: fe['email'],
-                    ),
+                    label: 'Email',
+                    errorText: fe['email'],
                     validator: validateEmail,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextField(
                     controller: _password,
                     enabled: !busy,
                     obscureText: true,
                     autofillHints: const [AutofillHints.newPassword],
-                    decoration: InputDecoration(
-                      labelText: 'Пароль',
-                      helperText: 'От 10 символов',
-                      errorText: fe['password'],
-                    ),
+                    label: 'Пароль',
+                    helper: 'От 10 символов',
+                    errorText: fe['password'],
                     validator: validateNewPassword,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextField(
                     controller: _orgName,
                     enabled: !busy,
-                    decoration: InputDecoration(
-                      labelText: 'Название организации',
-                      errorText: fe['organization.name'],
-                    ),
+                    label: 'Название организации',
+                    errorText: fe['organization.name'],
                     validator: (v) => validateRequired(v,
                         emptyMessage: 'Укажите название организации.'),
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextField(
                     controller: _city,
                     enabled: !busy,
-                    decoration: InputDecoration(
-                      labelText: 'Город',
-                      errorText: fe['organization.city'],
-                    ),
+                    label: 'Город',
+                    errorText: fe['organization.city'],
                     validator: (v) => validateRequired(v,
                         max: 100, emptyMessage: 'Укажите город.'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.lg),
                   DropdownButtonFormField<ActivityType>(
                     key: ValueKey(_role),
                     initialValue: _activity,
@@ -159,30 +153,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ? null
                         : (v) => setState(() => _activity = v ?? _activity),
                   ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: busy ? null : _submit,
-                    child: busy
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  semanticsLabel: 'Отправка',
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text('Отправка…'),
-                            ],
-                          )
-                        : const Text('Зарегистрироваться'),
+                  const SizedBox(height: AppSpacing.xl),
+                  AppButton(
+                    label: 'Зарегистрироваться',
+                    loading: busy,
+                    loadingLabel: 'Отправка…',
+                    onPressed: _submit,
                   ),
-                  TextButton(
+                  AppButton(
+                    label: 'Уже есть аккаунт? Войти',
+                    kind: AppButtonKind.text,
                     onPressed: busy ? null : () => context.go('/login'),
-                    child: const Text('Уже есть аккаунт? Войти'),
                   ),
                 ],
               ),
