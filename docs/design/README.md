@@ -13,6 +13,9 @@ Status: **draft, provisional**. `docs/api.md` (CON-01) does not exist yet, so ev
 | `dashboard.md` | Metric definitions and labels |
 | `tokens.md` | Design token names (no brand binding) |
 | `accessibility.md` | Contrast, touch targets, focus order, responsive rules |
+| `visual-audit-2026-11-07.md` | Visual audit of the mobile client with P0-P2 fixes and calculated contrast |
+| `visual-system.md` | Visual refinement tokens (supersede neutral values in `tokens.md`) and component states |
+| `visual-screens.md` | P0 screen layouts: login, home, catalog, batch, create, publish/archive, AI analysis |
 | `phase-2-materials.md` | Phase 2 mobile: batch create flow, catalog card, batch screen, statuses, states, messages (S03-S05) |
 
 ## Screen map (MVP)
