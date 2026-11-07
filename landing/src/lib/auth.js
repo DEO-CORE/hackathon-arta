@@ -1,5 +1,5 @@
 // Role-specific frontend validation. The buyer profile needs a new backend
-// contract; these helpers do not store credentials or make network requests.
+// contract; these helpers validate input without storing credentials.
 export const activities = {
   garment_factory: "Швейное производство",
   workshop: "Мастерская / ремесленник",
@@ -61,7 +61,7 @@ export function validateCredentials(
 }
 
 // Call only after validation. Enterprise matches the existing registration DTO.
-// Buyer uses a proposed personal-profile shape: see INTEGRATION.md before API use.
+// Buyer uses the personal-profile contract supported by the backend.
 // Hidden fields from the other role never enter the payload.
 export function registrationPayload(values) {
   const account = {

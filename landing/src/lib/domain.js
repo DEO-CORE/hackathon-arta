@@ -25,8 +25,9 @@ export const formatNumber = (value, maximumFractionDigits = 3) =>
     Number(value),
   );
 export const formatKg = (value) =>
-  translate("{{0}} кг", { 0: formatNumber(value) });
-export const formatPrice = (value) => `${formatNumber(value, 2)} KGS`;
+  value == null ? "—" : translate("{{0}} кг", { 0: formatNumber(value) });
+export const formatPrice = (value) =>
+  value == null ? "Цена не указана" : `${formatNumber(value, 2)} KGS`;
 
 export function requestTotal(quantity, price) {
   const cents =
@@ -35,6 +36,7 @@ export function requestTotal(quantity, price) {
 }
 
 export function availableUnits(material, requests) {
+  if (material.server) return toUnits(material.available_kg ?? "0");
   const consumed = requests
     .filter(
       (r) =>
@@ -108,6 +110,18 @@ export function transitionRequest(state, id, target) {
 }
 
 export function summarize(state) {
+  if (state.mode === "api") {
+    const a = state.analytics,
+      p = state.publicStats;
+    return {
+      registered: p?.registered_kg ?? null,
+      available: p?.available_kg ?? null,
+      reused: p?.confirmed_reuse_kg ?? null,
+      transferred: a?.transferred_kg ?? a?.received_kg ?? null,
+      held: a?.held_kg ?? null,
+      activeRequests: a?.active_reservations_count ?? 0,
+    };
+  }
   const sum = (statuses) =>
     state.requests
       .filter((r) => statuses.includes(r.status))

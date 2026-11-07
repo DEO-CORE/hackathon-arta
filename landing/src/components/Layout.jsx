@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Plus, Menu, X } from "lucide-react";
 import { Brand } from "./UI";
 import Footer from "./Footer";
-import { useDemo } from "../lib/store";
+import { useStore, bootstrap, logout } from "../lib/store";
 
 export default function Layout() {
   const { t, language } = useI18n();
@@ -24,7 +24,18 @@ export default function Layout() {
 
   const [menu, setMenu] = useState(false);
   const location = useLocation();
-  const state = useDemo();
+  const state = useStore();
+  const [sessionError, setSessionError] = useState("");
+  useEffect(() => {
+    bootstrap();
+  }, []);
+  const signOut = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      setSessionError(e.message);
+    }
+  };
   useEffect(() => {
     setMenu(false);
     if (location.hash)
@@ -68,12 +79,27 @@ export default function Layout() {
           <div className="header-tools">
             <LanguageSwitch key={location.key} onOpen={() => setMenu(false)} />
             <div className="header-auth">
-              <NavLink to="/login" className="header-login">
-                {t("Войти")}
-              </NavLink>
-              <Link to="/register" className="button button-dark">
-                {t("Регистрация")}
-              </Link>
+              {state.user ? (
+                <>
+                  <Link to="/requests">
+                    {state.user.profile_name ||
+                      state.organization?.name ||
+                      state.user.email}
+                  </Link>
+                  <button onClick={signOut} className="button button-dark">
+                    {t("Выйти")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <NavLink to="/login" className="header-login">
+                    {t("Войти")}
+                  </NavLink>
+                  <Link to="/register" className="button button-dark">
+                    {t("Регистрация")}
+                  </Link>
+                </>
+              )}
             </div>
             <button
               className="icon-button mobile-menu-toggle"
@@ -97,8 +123,14 @@ export default function Layout() {
             </NavLink>
             <NavLink to="/catalog">{t("Каталог тканей")}</NavLink>
             <NavLink to="/requests">{t("Мои заявки")}</NavLink>
-            <NavLink to="/login">{t("Войти")}</NavLink>
-            <NavLink to="/register">{t("Регистрация")}</NavLink>
+            {state.user ? (
+              <button onClick={signOut}>{t("Выйти")}</button>
+            ) : (
+              <>
+                <NavLink to="/login">{t("Войти")}</NavLink>
+                <NavLink to="/register">{t("Регистрация")}</NavLink>
+              </>
+            )}
             <Link className="button button-dark" to="/create">
               <Plus size={17} />
               {t("Разместить партию")}
@@ -109,6 +141,16 @@ export default function Layout() {
       {state.storageWarning && (
         <div className="container notice my-4" role="alert">
           {t(state.storageWarning)}
+        </div>
+      )}
+      {state.mode !== "api" && (
+        <div className="notice" role="status">
+          {t("Демонстрационный режим: изменения хранятся только в браузере.")}
+        </div>
+      )}
+      {(state.error || sessionError) && (
+        <div className="container notice" role="alert">
+          {state.error || sessionError}
         </div>
       )}
       <main id="main" tabIndex={-1}>

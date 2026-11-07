@@ -1,19 +1,20 @@
 import { useI18n, materialText } from "../i18n";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, ArrowUpRight, X } from "lucide-react";
 import { ButtonLink, EmptyState, MaterialCard } from "../components/UI";
 import { materialTypes } from "../data/materials";
-import { useDemo } from "../lib/store";
+import { useStore, loadCatalog } from "../lib/store";
 import { availableUnits, toUnits } from "../lib/domain";
 import { languages, translate } from "../i18n/locale";
 
 export default function Catalog() {
   const { t, locale } = useI18n();
 
-  const state = useDemo();
+  const state = useStore();
   const [params, setParams] = useSearchParams();
   const [limit, setLimit] = useState(6);
+  const [page, setPage] = useState(1);
   const query = params.get("q") || "";
   const type = params.get("type") || "";
   const city = params.get("city") || "";
@@ -24,34 +25,59 @@ export default function Catalog() {
     else next.delete(key);
     setParams(next, { replace: true });
     setLimit(6);
+    setPage(1);
   };
-  const cities = [...new Set(state.materials.map((m) => m.city))].sort((a, b) =>
-    t(a).localeCompare(t(b), locale),
-  );
-  const materials = state.materials
-    .filter((m) => {
-      const text = languages
-        .map(
-          ({ code }) =>
-            `${materialText(m, "name", code)} ${translate(materialTypes[m.material_type], {}, code)} ${materialText(m, "city", code)} ${materialText(m, "description", code)}`,
-        )
-        .join(" ")
-        .toLocaleLowerCase(locale);
-      return (
-        (!query || text.includes(query.toLocaleLowerCase(locale).trim())) &&
-        (!type || m.material_type === type) &&
-        (!city || m.city === city) &&
-        availableUnits(m, state.requests) > 0
+  useEffect(() => {
+    if (state.mode === "api") {
+      const timer = setTimeout(
+        () =>
+          loadCatalog({
+            page: String(page),
+            page_size: "6",
+            ...(query.trim() ? { q: query.trim() } : {}),
+            ...(type ? { material_type: type } : {}),
+            ...(city ? { city } : {}),
+            sort:
+              { "price-low": "price_asc", mass: "available_kg_desc" }[sort] ||
+              "created_at_desc",
+          }),
+        200,
       );
-    })
-    .sort((a, b) =>
-      sort === "price-low"
-        ? toUnits(a.price_per_kg, 2) - toUnits(b.price_per_kg, 2)
-        : sort === "mass"
-          ? availableUnits(b, state.requests) -
-            availableUnits(a, state.requests)
-          : b.created_at.localeCompare(a.created_at),
-    );
+      return () => clearTimeout(timer);
+    }
+  }, [query, type, city, sort, page, state.mode]);
+  const cities =
+    state.mode === "api"
+      ? state.cities
+      : [...new Set(state.materials.map((m) => m.city))];
+  const materials =
+    state.mode === "api"
+      ? state.catalog
+      : state.materials
+          .filter((m) => {
+            const text = languages
+              .map(
+                ({ code }) =>
+                  `${materialText(m, "name", code)} ${translate(materialTypes[m.material_type], {}, code)} ${materialText(m, "city", code)} ${materialText(m, "description", code)}`,
+              )
+              .join(" ")
+              .toLocaleLowerCase(locale);
+            return (
+              (!query ||
+                text.includes(query.toLocaleLowerCase(locale).trim())) &&
+              (!type || m.material_type === type) &&
+              (!city || m.city === city) &&
+              availableUnits(m, state.requests) > 0
+            );
+          })
+          .sort((a, b) =>
+            sort === "price-low"
+              ? toUnits(a.price_per_kg, 2) - toUnits(b.price_per_kg, 2)
+              : sort === "mass"
+                ? availableUnits(b, state.requests) -
+                  availableUnits(a, state.requests)
+                : b.created_at.localeCompare(a.created_at),
+          );
   const active = Boolean(query || type || city);
   return (
     <div className="catalog-page page-blocks">
@@ -143,13 +169,16 @@ export default function Catalog() {
         <div className="catalog-results-bar">
           <p aria-live="polite">
             {t("Найдено партий: ")}
-            <strong>{materials.length}</strong>
+            <strong>
+              {state.mode === "api" ? state.catalogTotal : materials.length}
+            </strong>
             {active && (
               <button
                 className="clear-filter"
                 onClick={() => {
                   setParams({});
                   setLimit(6);
+                  setPage(1);
                 }}
               >
                 {t("Сбросить ")}
@@ -170,6 +199,7 @@ export default function Catalog() {
             </select>
           </label>
         </div>
+        {state.loading && <p role="status">{t("Загрузка каталога…")}</p>}
         {materials.length ? (
           <>
             <div className="material-grid">
@@ -181,7 +211,29 @@ export default function Catalog() {
                 />
               ))}
             </div>
-            {materials.length > limit && (
+            {state.mode === "api" && (
+              <div className="dialog-actions">
+                <button
+                  disabled={page === 1 || state.loading}
+                  onClick={() => setPage(page - 1)}
+                  className="button button-outline"
+                >
+                  Назад
+                </button>
+                <span>
+                  {t("Страница")}
+                  {page}
+                </span>
+                <button
+                  disabled={page * 6 >= state.catalogTotal || state.loading}
+                  onClick={() => setPage(page + 1)}
+                  className="button button-outline"
+                >
+                  {t("Далее")}
+                </button>
+              </div>
+            )}
+            {state.mode !== "api" && materials.length > limit && (
               <div className="mt-9 text-center">
                 <button
                   className="button button-outline"

@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { register, login, forgotPassword, resetPassword } from "../lib/store";
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,6 +17,7 @@ import {
 import { ButtonLink } from "../components/UI";
 import {
   activities,
+  registrationPayload,
   validateCredentials,
   validateEmail,
   validateRegistrationProfile,
@@ -216,10 +218,10 @@ function Completion({ kind, role }) {
   }, []);
   const content = {
     register: {
-      title: "Регистрация скоро откроется",
-      text: "Создание аккаунта пока недоступно. Вы уже можете посмотреть материалы и возможности ARTA.",
-      action: role === "enterprise" ? "Разместить партию" : "Открыть каталог",
-      to: role === "enterprise" ? "/create" : "/catalog",
+      title: "Аккаунт создан",
+      text: "Теперь войдите с указанными email и паролем.",
+      action: "Войти",
+      to: "/login",
     },
     login: {
       title: "Вход скоро будет доступен",
@@ -228,14 +230,14 @@ function Completion({ kind, role }) {
       to: "/catalog",
     },
     forgot: {
-      title: "Восстановление пока недоступно",
-      text: "Не удалось отправить ссылку для восстановления. Попробуйте позже.",
-      action: "Посмотреть смену пароля",
-      to: "/reset-password",
+      title: "Проверьте почту",
+      text: "Если аккаунт существует, на указанный email придёт ссылка для смены пароля.",
+      action: "Вернуться ко входу",
+      to: "/login",
     },
     reset: {
-      title: "Пароль пока не изменён",
-      text: "Смена пароля пока недоступна. Попробуйте позже.",
+      title: "Пароль изменён",
+      text: "Войдите с новым паролем. Предыдущие сессии завершены.",
       action: "Вернуться ко входу",
       to: "/login",
     },
@@ -281,6 +283,9 @@ function Register() {
   );
   const [step, setStep] = useState(1);
   const [complete, setComplete] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [serverError, setServerError] = useState("");
+  const requestLock = useRef(false);
   const isBuyer = values.role === "buyer";
   const stepTitle = useRef(null);
   const previousStep = useRef(step);
@@ -288,13 +293,28 @@ function Register() {
     if (previousStep.current !== step) stepTitle.current?.focus();
     previousStep.current = step;
   }, [step]);
-  const submit = (event) => {
+  const submit = async (event) => {
+    if (requestLock.current) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     if (step === 1) {
       if (check(validateRegistrationProfile(values))) setStep(2);
     } else if (check(validateCredentials(values, { newPassword: true }))) {
-      setValues((current) => ({ ...current, password: "", confirm: "" }));
-      setComplete(true);
+      requestLock.current = true;
+      setPending(true);
+      setServerError("");
+      try {
+        await register(registrationPayload(values));
+        setValues((current) => ({ ...current, password: "", confirm: "" }));
+        setComplete(true);
+      } catch (error) {
+        setServerError(error.message);
+      } finally {
+        requestLock.current = false;
+        setPending(false);
+      }
     }
   };
   if (complete) return <Completion kind="register" role={values.role} />;
@@ -323,6 +343,11 @@ function Register() {
           {t(" Доступ")}
         </li>
       </ol>
+      {serverError && (
+        <p role="alert" className="auth-error">
+          {serverError}
+        </p>
+      )}
       <form noValidate onSubmit={submit} className="auth-form">
         <div key={step} className="auth-form-content">
           <h2 ref={stepTitle} tabIndex={-1} className="auth-step-title">
@@ -554,7 +579,12 @@ function Register() {
               {t(" Назад")}
             </button>
           )}
-          <button type="submit" className="button button-primary">
+          <button
+            type="submit"
+            disabled={pending}
+            aria-busy={pending}
+            className="button button-primary"
+          >
             {step === 1 ? t("Продолжить") : t("Зарегистрироваться")}
             <ArrowRight size={18} />
           </button>
@@ -569,6 +599,18 @@ function Register() {
 }
 
 function AccessForm({ mode }) {
+  const navigate = useNavigate();
+  const [resetToken] = useState(
+    () => new URLSearchParams(window.location.hash.slice(1)).get("token") || "",
+  );
+  useEffect(() => {
+    if (mode === "reset" && window.location.hash)
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
+  }, [mode]);
   const { t } = useI18n();
 
   const { values, setValues, errors, update, check } = useFormValues({
@@ -577,6 +619,9 @@ function AccessForm({ mode }) {
     confirm: "",
   });
   const [complete, setComplete] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [serverError, setServerError] = useState("");
+  const requestLock = useRef(false);
   const forgot = mode === "forgot";
   const reset = mode === "reset";
   const content = {
@@ -597,7 +642,11 @@ function AccessForm({ mode }) {
       action: "Сохранить пароль",
     },
   }[mode];
-  const submit = (event) => {
+  const submit = async (event) => {
+    if (requestLock.current) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const emailError = forgot ? validateEmail(values.email) : "";
     const nextErrors = forgot
@@ -606,8 +655,28 @@ function AccessForm({ mode }) {
         : {}
       : validateCredentials(values, { email: !reset, newPassword: reset });
     if (!check(nextErrors)) return;
-    setValues((current) => ({ ...current, password: "", confirm: "" }));
-    setComplete(true);
+    requestLock.current = true;
+    setPending(true);
+    setServerError("");
+    try {
+      if (forgot) await forgotPassword(values.email);
+      else if (reset) {
+        if (!resetToken)
+          throw new Error("Откройте ссылку из письма восстановления.");
+        await resetPassword(resetToken, values.password);
+      } else {
+        await login(values.email, values.password);
+        navigate("/requests");
+        return;
+      }
+      setValues((current) => ({ ...current, password: "", confirm: "" }));
+      setComplete(true);
+    } catch (error) {
+      setServerError(error.message);
+    } finally {
+      requestLock.current = false;
+      setPending(false);
+    }
   };
   if (complete) return <Completion kind={mode} />;
   return (
@@ -615,6 +684,11 @@ function AccessForm({ mode }) {
       <AuthHeading title={t(content.title)}>
         {t(content.description)}
       </AuthHeading>
+      {serverError && (
+        <p role="alert" className="auth-error">
+          {serverError}
+        </p>
+      )}
       <form
         noValidate
         onSubmit={submit}
@@ -667,7 +741,12 @@ function AccessForm({ mode }) {
             {t("Забыли пароль?")}
           </Link>
         )}
-        <button type="submit" className="button button-primary auth-submit">
+        <button
+          type="submit"
+          disabled={pending}
+          aria-busy={pending}
+          className="button button-primary auth-submit"
+        >
           {t(content.action)}
           <ArrowRight size={18} />
         </button>

@@ -1,5 +1,5 @@
 import { useI18n, materialText } from "../i18n";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
@@ -15,8 +15,15 @@ import {
   ErrorMessage,
   ReuseIdeas,
 } from "../components/UI";
+import AnalysisPanel from "../components/AnalysisPanel";
 import { conditions, materialTypes } from "../data/materials";
-import { useDemo, demoRepository } from "../lib/store";
+import {
+  useStore,
+  repository,
+  loadMaterial,
+  latestAnalysis,
+  analyze,
+} from "../lib/store";
 import {
   availableUnits,
   fromUnits,
@@ -28,6 +35,8 @@ import {
 function RequestDialog({ material, available, onClose }) {
   const { t } = useI18n();
 
+  const state = useStore();
+  const [pending, setPending] = useState(false);
   const [quantity, setQuantity] = useState("1");
   const [organization, setOrganization] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -40,12 +49,13 @@ function RequestDialog({ material, available, onClose }) {
   } catch {
     /* Partial input has no estimate. */
   }
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     if (lock.current) return;
     lock.current = true;
+    setPending(true);
     try {
-      demoRepository.createRequest({
+      await repository.createRequest({
         material_id: material.id,
         quantity_kg: quantity,
         organization_name: organization,
@@ -55,6 +65,8 @@ function RequestDialog({ material, available, onClose }) {
     } catch (err) {
       setError(err.message);
       lock.current = false;
+    } finally {
+      setPending(false);
     }
   }
   return (
@@ -100,20 +112,25 @@ function RequestDialog({ material, available, onClose }) {
               maxLength={13}
             />
           </label>
-          <label className="field">
-            {t("Название мастерской")}{" "}
-            <span className="required-label">{t("Обязательное")}</span>
-            <input
-              required
-              maxLength={100}
-              value={organization}
-              onChange={(e) => {
-                setOrganization(e.target.value);
-                setError("");
-              }}
-              placeholder={t("Например, мастерская «Курак»")}
-            />
-          </label>
+          {state.mode !== "api" && (
+            <>
+              {" "}
+              <label className="field">
+                {t("Название мастерской")}{" "}
+                <span className="required-label">{t("Обязательное")}</span>
+                <input
+                  required
+                  maxLength={100}
+                  value={organization}
+                  onChange={(e) => {
+                    setOrganization(e.target.value);
+                    setError("");
+                  }}
+                  placeholder={t("Например, мастерская «Курак»")}
+                />
+              </label>
+            </>
+          )}
           <label className="field">
             {t("Для чего нужен материал")}{" "}
             <span className="optional-label">{t("Необязательно")}</span>
@@ -135,7 +152,11 @@ function RequestDialog({ material, available, onClose }) {
             )}
           </p>
           <ErrorMessage>{error}</ErrorMessage>
-          <button className="button button-dark w-full" type="submit">
+          <button
+            className="button button-dark w-full"
+            type="submit"
+            disabled={pending}
+          >
             {t("Создать заявку ")}
             <ArrowUpRight size={18} />
           </button>
@@ -150,9 +171,38 @@ export default function MaterialDetail() {
 
   const { id } = useParams();
   const location = useLocation();
-  const state = useDemo();
+  const state = useStore();
   const [requestOpen, setRequestOpen] = useState(false);
+  const [loading, setLoading] = useState(state.mode === "api");
+  const [analysis, setAnalysis] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (state.mode === "api") {
+      setLoading(true);
+      loadMaterial(id)
+        .catch(() => {})
+        .finally(() => {
+          if (live) setLoading(false);
+        });
+    }
+    return () => {
+      live = false;
+    };
+  }, [id, state.mode, state.user?.id]);
+  useEffect(() => {
+    if (state.mode === "api" && state.user?.role === "enterprise")
+      latestAnalysis(id)
+        .then(setAnalysis)
+        .catch(() => {});
+  }, [id, state.mode, state.user?.id]);
+
   const material = state.materials.find((m) => m.id === id);
+  if (loading)
+    return (
+      <p className="container" role="status">
+        {t("Загрузка партии…")}
+      </p>
+    );
   if (!material)
     return (
       <div className="page-blocks">
@@ -236,7 +286,17 @@ export default function MaterialDetail() {
               <strong>{formatPrice(material.price_per_kg)}</strong>
               <span>{t("за 1 кг")}</span>
             </div>
-            {available > 0 ? (
+            {state.mode === "api" && state.user?.role !== "buyer" ? (
+              <p className="notice">
+                {material.is_own ? (
+                  "Это ваша партия. Входящие заявки доступны в разделе «Мои заявки»."
+                ) : (
+                  <Link to="/login">
+                    {t("Войдите как покупатель, чтобы отправить заявку.")}
+                  </Link>
+                )}
+              </p>
+            ) : available > 0 ? (
               <button
                 className="button button-dark w-full"
                 onClick={() => setRequestOpen(true)}
@@ -256,10 +316,28 @@ export default function MaterialDetail() {
         </div>
       </section>
       <section className="page-block detail-reuse">
-        <ReuseIdeas
-          type={material.material_type}
-          condition={material.condition}
-        />
+        {state.mode === "api" ? (
+          material.is_own ? (
+            <AnalysisPanel
+              analysis={analysis}
+              onAnalyze={() => analyze(id, setAnalysis)}
+            />
+          ) : (
+            <section className="reuse-panel">
+              <h2>{t("Проверьте пригодность материала")}</h2>
+              <p>
+                {t(
+                  "Подтвердите состав и условия использования с продавцом. AI-анализ доступен владельцу партии.",
+                )}
+              </p>
+            </section>
+          )
+        ) : (
+          <ReuseIdeas
+            type={material.material_type}
+            condition={material.condition}
+          />
+        )}
         <aside className="detail-aside">
           <span className="eyebrow">{t("Перед использованием")}</span>
           <h3>

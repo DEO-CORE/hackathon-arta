@@ -20,7 +20,7 @@ import {
   HomeFAQ,
   HomeSupport,
 } from "../components/HomeSections";
-import { useDemo } from "../lib/store";
+import { useStore } from "../lib/store";
 import { summarize, formatKg, availableUnits } from "../lib/domain";
 import { useCardShuffle, useSectionReveal } from "../lib/motion";
 
@@ -150,11 +150,11 @@ export default function Home() {
 
   const page = useRef(null);
   useSectionReveal(page);
-  const state = useDemo();
+  const state = useStore();
   const summary = summarize(state);
-  const materials = state.materials.filter(
-    (material) => availableUnits(material, state.requests) > 0,
-  );
+  const materials = (
+    state.mode === "api" ? state.catalog : state.materials
+  ).filter((material) => availableUnits(material, state.requests) > 0);
   return (
     <div className="home-page home-blocks" ref={page}>
       <section className="home-hero">
@@ -364,7 +364,7 @@ export default function Home() {
               </h3>
               <p>
                 {t(
-                  "Материал, город, масса и цена — вся информация для первого шага собрана в одном месте. ислам гей ислам гей ислам гей ислам гей ", 
+                  "Материал, город, масса и цена — вся информация для первого шага собрана в одном месте. ",
                 )}
               </p>
             </article>

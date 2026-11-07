@@ -1,5 +1,6 @@
+import AccountGate from "../components/AccountGate";
 import { useI18n, materialText } from "../i18n";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -11,7 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { ButtonLink, Dialog, EmptyState, ErrorMessage } from "../components/UI";
-import { demoRepository, useDemo } from "../lib/store";
+import { repository, useStore, refreshAccount } from "../lib/store";
 import { formatKg, formatPrice, requestTotal, summarize } from "../lib/domain";
 
 const stages = ["pending", "confirmed", "transferred", "received", "reused"];
@@ -50,15 +51,23 @@ const actions = {
     title: "Подтвердить использование",
     role: "Покупатель",
     description:
-      "Подтвердите использование всего полученного объёма. Только после этого масса попадёт в счётчик повторного использования.",
+      "Укажите фактически использованную массу и основание. Использование подтверждается отдельно от получения.",
   },
 };
 
 export default function Requests() {
   const { t, locale } = useI18n();
 
-  const state = useDemo();
+  const state = useStore();
   const stats = summarize(state);
+  if (state.mode === "api")
+    stats.reused = state.analytics?.confirmed_reuse_kg ?? null;
+  useEffect(() => {
+    if (state.mode === "api" && state.user) refreshAccount();
+  }, [state.user?.id, state.mode]);
+  const [quantity, setQuantity] = useState(""),
+    [basis, setBasis] = useState(""),
+    [pending, setPending] = useState(false);
   const [filter, setFilter] = useState("all");
   const [dialog, setDialog] = useState(null);
   const [error, setError] = useState("");
@@ -74,17 +83,24 @@ export default function Requests() {
   function openDialog(value) {
     setError("");
     lock.current = false;
+    const request = state.requests.find((r) => r.id === value.id);
+    setQuantity(value.target === "reused" ? "" : request?.quantity_kg || "");
+    setBasis("");
     setDialog(value);
   }
-  function confirm() {
+  async function confirm() {
     if (lock.current) return;
     lock.current = true;
+    setPending(true);
     try {
       if (dialog.reset) {
-        demoRepository.reset();
+        await repository.reset();
         setNotice("Данные очищены.");
       } else {
-        demoRepository.transition(dialog.id, dialog.target);
+        await repository.transition(dialog.id, dialog.target, {
+          quantity,
+          basis,
+        });
         setNotice({ status: dialog.target });
       }
       setDialog(null);
@@ -92,8 +108,20 @@ export default function Requests() {
       setError(err.message);
     } finally {
       lock.current = false;
+      setPending(false);
     }
   }
+  if (state.mode === "api" && !state.ready)
+    return (
+      <AccountGate title="Мои заявки" description="Загрузка сессии…" loading />
+    );
+  if (state.mode === "api" && !state.user)
+    return (
+      <AccountGate
+        title="Мои заявки"
+        description="Войдите, чтобы просмотреть ваши заявки."
+      />
+    );
   return (
     <div className="page-blocks requests-page">
       <section className="page-heading page-block">
@@ -159,20 +187,22 @@ export default function Requests() {
               </button>
             ))}
           </div>
-          <button
-            className="text-link reset-button"
-            onClick={() =>
-              openDialog({
-                reset: true,
-                title: "Очистить данные?",
-                description:
-                  "Созданные вами партии, фотографии и заявки будут удалены из этого браузера. Исходный каталог сохранится. Это действие нельзя отменить.",
-              })
-            }
-          >
-            <RotateCcw size={16} />
-            {t("Очистить данные")}
-          </button>
+          {state.mode !== "api" && (
+            <button
+              className="text-link reset-button"
+              onClick={() =>
+                openDialog({
+                  reset: true,
+                  title: "Очистить данные?",
+                  description:
+                    "Созданные вами партии, фотографии и заявки будут удалены из этого браузера. Исходный каталог сохранится. Это действие нельзя отменить.",
+                })
+              }
+            >
+              <RotateCcw size={16} />
+              {t("Очистить данные")}
+            </button>
+          )}
         </div>
         {!visible.length ? (
           <EmptyState
@@ -197,11 +227,23 @@ export default function Requests() {
         ) : (
           <div className="request-list">
             {visible.map((request) => {
-              const material = state.materials.find(
-                (m) => m.id === request.material_id,
-              );
+              const material =
+                state.materials.find((m) => m.id === request.material_id) ||
+                (state.mode === "api"
+                  ? {
+                      id: request.material_id,
+                      name: request.material_name,
+                      image: "",
+                      price_per_kg: request.agreed_price_per_kg,
+                    }
+                  : null);
               if (!material) return null;
               const action = actions[request.status];
+              const canAct =
+                state.mode !== "api" ||
+                (action?.role === "Продавец"
+                  ? state.user?.role === "enterprise"
+                  : state.user?.role === "buyer");
               return (
                 <article className="request-card" key={request.id}>
                   <div className="request-card-top">
@@ -209,12 +251,14 @@ export default function Requests() {
                       to={`/catalog/${material.id}`}
                       className="request-thumbnail"
                     >
-                      <img
-                        src={material.image}
-                        alt={materialText(material, "name")}
-                        width="120"
-                        height="120"
-                      />
+                      {material.image && (
+                        <img
+                          src={material.image}
+                          alt={materialText(material, "name")}
+                          width="120"
+                          height="120"
+                        />
+                      )}
                     </Link>
                     <div className="request-title">
                       <p className="text-xs text-muted">
@@ -232,10 +276,13 @@ export default function Requests() {
                         {request.organization_name} ·{" "}
                         {formatKg(request.quantity_kg)} ·{" "}
                         {formatPrice(
-                          requestTotal(
-                            request.quantity_kg,
-                            request.price_per_kg,
-                          ),
+                          state.mode === "api"
+                            ? (request.transaction?.sale_amount_kgs ??
+                                request.requested_sale_amount_kgs)
+                            : requestTotal(
+                                request.quantity_kg,
+                                request.price_per_kg,
+                              ),
                         )}
                       </p>
                     </div>
@@ -306,6 +353,7 @@ export default function Requests() {
                           </button>
                         )}
                         <button
+                          disabled={!canAct}
                           className="button button-dark"
                           onClick={() =>
                             openDialog({ id: request.id, ...action })
@@ -320,7 +368,11 @@ export default function Requests() {
                   {request.status === "reused" && (
                     <p className="reuse-confirmed">
                       <Recycle size={18} />
-                      {formatKg(request.quantity_kg)}
+                      {formatKg(
+                        state.mode === "api"
+                          ? request.transaction.confirmed_reuse_kg
+                          : request.quantity_kg,
+                      )}
                       {t(
                         " добавлено к повторному использованию. Спасибо за новый цикл!",
                       )}
@@ -332,9 +384,53 @@ export default function Requests() {
           </div>
         )}
       </section>
+      {state.mode === "api" && state.requestTotal > 20 && (
+        <div className="dialog-actions">
+          <button
+            disabled={state.requestPage <= 1}
+            onClick={() => refreshAccount(state.requestPage - 1)}
+          >
+            Назад
+          </button>
+          <span>
+            {t("Страница")}
+            {state.requestPage}
+          </span>
+          <button
+            disabled={state.requestPage * 20 >= state.requestTotal}
+            onClick={() => refreshAccount(state.requestPage + 1)}
+          >
+            {t("Далее")}
+          </button>
+        </div>
+      )}
       {dialog && (
         <Dialog title={t(dialog.title)} onClose={() => setDialog(null)}>
           <p className="text-muted leading-relaxed">{t(dialog.description)}</p>
+          {state.mode === "api" &&
+            ["transferred", "reused"].includes(dialog.target) && (
+              <label className="field">
+                {t("Фактическая масса, кг")}
+                <input
+                  inputMode="decimal"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </label>
+            )}
+          {state.mode === "api" &&
+            ["cancelled", "reused"].includes(dialog.target) && (
+              <label className="field">
+                {dialog.target === "cancelled"
+                  ? "Причина отмены"
+                  : "Основание использования"}
+                <textarea
+                  maxLength={500}
+                  value={basis}
+                  onChange={(e) => setBasis(e.target.value)}
+                />
+              </label>
+            )}
           <ErrorMessage>{error}</ErrorMessage>
           <div className="dialog-actions">
             <button
@@ -345,6 +441,7 @@ export default function Requests() {
             </button>
             <button
               className={`button ${dialog.reset || dialog.target === "cancelled" ? "button-danger" : "button-dark"}`}
+              disabled={pending}
               onClick={confirm}
             >
               {dialog.reset
