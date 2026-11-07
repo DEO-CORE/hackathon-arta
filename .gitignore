@@ -1,0 +1,31 @@
+# Secrets: keep only the example templates in git
+.env
+.env.*
+!.env.example
+bek_arta/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+backend/var/
+
+# Flutter / Dart
+frontend/build/
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/ios/Flutter/ephemeral/
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/ios/Pods/
+frontend/macos/Pods/
+
+# Logs, OS and editor files
+*.log
+.DS_Store
+.idea/
+.vscode/
