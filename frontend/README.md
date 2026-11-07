@@ -1,4 +1,19 @@
-# ARTA client (Flutter)
+# Клиент ARTA (Flutter)
+
+## Запуск в Firefox или другом браузере без Chrome
+
+Сначала запустите API на порту 8000. В `backend/.env` укажите
+`CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000`.
+Затем из каталога `frontend/` выполните:
+
+```sh
+flutter pub get
+flutter run -d web-server --web-hostname localhost --web-port 3000 --dart-define=API_BASE_URL=http://localhost:8000
+```
+
+Откройте `http://localhost:3000` вручную в Firefox. Команда `-d chrome` требует
+установленного Chrome; для web-server он не нужен. Уведомления о новых версиях
+пакетов не являются ошибкой запуска. Обновлять зависимости для запуска не требуется.
 
 Checks (run from `frontend/`):
 

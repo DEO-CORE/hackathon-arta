@@ -9,6 +9,9 @@ from app.core.request_context import get_request_id
 
 # (status, default Russian message) per error code from docs/api.md 1.2.
 _DEFAULT_MESSAGES = {
+    "INSUFFICIENT_STOCK": "Недостаточно свободной массы.",
+    "DEMAND_EXCEEDED": "Объём превышает оставшийся спрос.",
+    "IDEMPOTENCY_KEY_REUSED": "Ключ уже использован с другими данными.",
     "UNAUTHENTICATED": "Требуется вход.",
     "INVALID_CREDENTIALS": "Неверный email или пароль.",
     "ACCOUNT_DISABLED": "Учётная запись отключена. Обратитесь в поддержку.",

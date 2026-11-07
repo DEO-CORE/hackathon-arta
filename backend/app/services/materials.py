@@ -308,11 +308,20 @@ def confirm_material(
     if m.status == MaterialStatus.archived:
         raise _archived_error("confirm")
     if analysis_id is not None:
-        # AI analyses are not implemented yet (AI-02), so no analysis can belong to this material.
-        raise AppError(
-            409, "PRECONDITION_FAILED", details={"reason": "ANALYSIS_NOT_FOUND_FOR_MATERIAL"}
-        )
+        from app.models.planning import Analysis
+
+        analysis = db.get(Analysis, analysis_id)
+        if analysis is None or analysis.material_id != m.id:
+            raise AppError(
+                409, "PRECONDITION_FAILED", details={"reason": "ANALYSIS_NOT_FOUND_FOR_MATERIAL"}
+            )
+        if analysis.input_version != m.version:
+            raise AppError(409, "PRECONDITION_FAILED", details={"reason": "ANALYSIS_STALE"})
+        if analysis.status != "succeeded":
+            raise AppError(409, "PRECONDITION_FAILED", details={"reason": "ANALYSIS_NOT_SUCCEEDED"})
+        analysis.confirmed_at, analysis.confirmed_by = utcnow(), user.id
     if m.confirmed_at is not None:
+        db.commit()
         return m  # repeat for an already confirmed version
     m.confirmed_at = utcnow()
     m.confirmed_by = user.id
@@ -385,7 +394,16 @@ def archive_material(db: Session, user: User, raw_id: str, version: int) -> Mate
             "ACTIVE_OBLIGATIONS",
             details={"held_kg": f"{m.held_kg:.3f}", "reason": "HELD_RESERVATIONS"},
         )
-    # TODO(BE-06): cancel pending reservations with cancel_reason MATERIAL_ARCHIVED here (A19-7).
+    from app.models.commerce import Reservation
+
+    for reservation in db.scalars(
+        select(Reservation)
+        .where(Reservation.material_id == m.id, Reservation.status == "pending")
+        .with_for_update()
+    ):
+        reservation.status = "cancelled"
+        reservation.cancel_reason = "MATERIAL_ARCHIVED"
+        reservation.cancelled_by_role = "enterprise"
     m.status = MaterialStatus.archived
     m.version += 1
     db.commit()

@@ -2,4 +2,26 @@ from app.models.material import Material, MaterialImage
 from app.models.organization import Organization
 from app.models.user import User
 
-__all__ = ["Material", "MaterialImage", "Organization", "User"]
+__all__ = [
+    "Material",
+    "MaterialImage",
+    "Organization",
+    "User",
+    "BuyerRequirement",
+    "IdempotencyRecord",
+    "ImpactRecord",
+    "Reservation",
+    "Transaction",
+    "Allocation",
+    "Analysis",
+    "OptimizationRun",
+]
+
+from app.models.commerce import (
+    BuyerRequirement,
+    IdempotencyRecord,
+    ImpactRecord,
+    Reservation,
+    Transaction,
+)
+from app.models.planning import Allocation, Analysis, OptimizationRun
